@@ -21,7 +21,7 @@ import static com.facebook.presto.common.type.UnknownType.UNKNOWN;
 import static com.facebook.presto.common.type.VarcharType.createVarcharType;
 import static java.util.Arrays.asList;
 
-public class TestMapTopNValues
+public class TestMapTopNValuesComparatorFunction
         extends AbstractTestFunctions
 {
     @Test

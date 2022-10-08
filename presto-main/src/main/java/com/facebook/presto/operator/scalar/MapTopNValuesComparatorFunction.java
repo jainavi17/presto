@@ -35,14 +35,14 @@ import static com.facebook.presto.util.Failures.checkCondition;
 
 @ScalarFunction("map_top_n_values")
 @Description("Sorts the given array with a lambda comparator.")
-public final class MapTopNValues
+public final class MapTopNValuesComparatorFunction
 {
     private static final int INITIAL_LENGTH = 128;
     private List<Integer> positions = Ints.asList(new int[INITIAL_LENGTH]);
 
     @TypeParameter("K")
     @TypeParameter("V")
-    public MapTopNValues(@TypeParameter("K") Type keyType, @TypeParameter("V") Type valueType) {}
+    public MapTopNValuesComparatorFunction(@TypeParameter("K") Type keyType, @TypeParameter("V") Type valueType) {}
 
     @TypeParameter("K")
     @TypeParameter("V")
