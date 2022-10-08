@@ -156,7 +156,8 @@ import com.facebook.presto.operator.scalar.MapIndeterminateOperator;
 import com.facebook.presto.operator.scalar.MapKeys;
 import com.facebook.presto.operator.scalar.MapNotEqualOperator;
 import com.facebook.presto.operator.scalar.MapSubscriptOperator;
-import com.facebook.presto.operator.scalar.MapTopNValues;
+import com.facebook.presto.operator.scalar.MapTopNValuesComparatorFunction;
+import com.facebook.presto.operator.scalar.MapTopNValuesFunction;
 import com.facebook.presto.operator.scalar.MapValues;
 import com.facebook.presto.operator.scalar.MathFunctions;
 import com.facebook.presto.operator.scalar.MathFunctions.LegacyLogFunction;
@@ -817,7 +818,8 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .scalar(MultimapFromEntriesFunction.class)
                 .scalar(MapNotEqualOperator.class)
                 .scalar(MapKeys.class)
-                .scalar(MapTopNValues.class)
+                .scalar(MapTopNValuesComparatorFunction.class)
+                .scalar(MapTopNValuesFunction.class)
                 .scalar(MapValues.class)
                 .scalar(MapCardinalityFunction.class)
                 .scalar(EmptyMapConstructor.class)
