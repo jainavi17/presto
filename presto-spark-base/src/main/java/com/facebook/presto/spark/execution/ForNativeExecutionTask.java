@@ -11,16 +11,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.server;
+package com.facebook.presto.spark.execution;
 
-import com.facebook.presto.Session;
-import com.facebook.presto.execution.warnings.WarningCollectorFactory;
-import com.facebook.presto.spi.QueryId;
-import com.facebook.presto.spi.security.AuthorizedIdentity;
+import javax.inject.Qualifier;
 
-import java.util.Optional;
+import java.lang.annotation.Retention;
+import java.lang.annotation.Target;
 
-public interface SessionSupplier
+import static java.lang.annotation.ElementType.FIELD;
+import static java.lang.annotation.ElementType.METHOD;
+import static java.lang.annotation.ElementType.PARAMETER;
+import static java.lang.annotation.RetentionPolicy.RUNTIME;
+
+@Retention(RUNTIME)
+@Target({FIELD, PARAMETER, METHOD})
+@Qualifier
+public @interface ForNativeExecutionTask
 {
-    Session createSession(QueryId queryId, SessionContext context, WarningCollectorFactory warningCollectorFactory, Optional<AuthorizedIdentity> authorizedIdentity);
 }
