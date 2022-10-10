@@ -21,17 +21,12 @@ import com.facebook.presto.spi.function.ScalarFunction;
 import com.facebook.presto.spi.function.SqlType;
 import com.facebook.presto.spi.function.TypeParameter;
 import com.facebook.presto.spi.function.TypeParameterSpecialization;
-import com.google.common.primitives.Ints;
 import io.airlift.slice.Slice;
-
-import java.util.List;
 
 @ScalarFunction("map_top_n_values")
 @Description("Get the top N values of the given map with lambda comparator.")
 public final class MapTopNValuesComparatorFunction
 {
-    private static final int INITIAL_LENGTH = 128;
-    private List<Integer> positions = Ints.asList(new int[INITIAL_LENGTH]);
 
     @TypeParameter("K")
     @TypeParameter("V")
