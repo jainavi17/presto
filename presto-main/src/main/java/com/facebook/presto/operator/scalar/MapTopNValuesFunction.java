@@ -48,16 +48,21 @@ public final class MapTopNValuesFunction
         }
 
         Block block = ArraySortFunction.sort(lessThanFunction, type, MapValues.getValues(type, mapBlock));
-        int arrayLength = block.getPositionCount();
+        return computeTopNBlock(type, block, n);
+    }
+
+    public static Block computeTopNBlock(Type type, Block sortedBlock, long n)
+    {
+        int arrayLength = sortedBlock.getPositionCount();
         BlockBuilder blockBuilder = type.createBlockBuilder(null, arrayLength);
 
         long cnt = 0;
         for (int i = arrayLength - 1; i >= 0 && cnt < n; --i) {
-            if (block.isNull(i)) {
+            if (sortedBlock.isNull(i)) {
                 continue;
             }
 
-            type.appendTo(block, i, blockBuilder);
+            type.appendTo(sortedBlock, i, blockBuilder);
             cnt++;
         }
 
