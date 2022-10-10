@@ -34,7 +34,7 @@ import static com.facebook.presto.spi.StandardErrorCode.INVALID_FUNCTION_ARGUMEN
 import static com.facebook.presto.util.Failures.checkCondition;
 
 @ScalarFunction("map_top_n_values")
-@Description("Sorts the given array with a lambda comparator.")
+@Description("Get the top N values of the given map with lambda comparator.")
 public final class MapTopNValuesComparatorFunction
 {
     private static final int INITIAL_LENGTH = 128;
