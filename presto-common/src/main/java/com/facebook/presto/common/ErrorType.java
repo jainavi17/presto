@@ -11,33 +11,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.spi.resourceGroups;
+package com.facebook.presto.common;
 
 import com.facebook.drift.annotations.ThriftEnum;
 import com.facebook.drift.annotations.ThriftEnumValue;
 
 @ThriftEnum
-public enum QueryType
+public enum ErrorType
 {
-    DATA_DEFINITION(1),
-    DELETE(2),
-    DESCRIBE(3),
-    EXPLAIN(4),
-    ANALYZE(5),
-    INSERT(6),
-    SELECT(7),
-    /**/;
+    USER_ERROR(0),
+    INTERNAL_ERROR(1),
+    INSUFFICIENT_RESOURCES(2),
+    EXTERNAL(3);
 
-    private final int value;
+    private final int code;
 
-    private QueryType(int value)
+    ErrorType(int code)
     {
-        this.value = value;
+        this.code = code;
     }
 
     @ThriftEnumValue
-    public int getValue()
+    public int getCode()
     {
-        return value;
+        return code;
     }
 }
