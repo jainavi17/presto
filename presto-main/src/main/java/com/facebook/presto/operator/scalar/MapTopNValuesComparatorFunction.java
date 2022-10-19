@@ -27,7 +27,6 @@ import io.airlift.slice.Slice;
 @Description("Get the top N values of the given map with lambda comparator.")
 public final class MapTopNValuesComparatorFunction
 {
-
     @TypeParameter("K")
     @TypeParameter("V")
     public MapTopNValuesComparatorFunction(@TypeParameter("K") Type keyType, @TypeParameter("V") Type valueType) {}
