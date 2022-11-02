@@ -238,15 +238,18 @@ public final class SystemSessionProperties
     public static final String LEAF_NODE_LIMIT_ENABLED = "leaf_node_limit_enabled";
     public static final String PUSH_REMOTE_EXCHANGE_THROUGH_GROUP_ID = "push_remote_exchange_through_group_id";
     public static final String OPTIMIZE_MULTIPLE_APPROX_PERCENTILE_ON_SAME_FIELD = "optimize_multiple_approx_percentile_on_same_field";
-
-    //TODO: Prestissimo related session properties that are temporarily put here. They will be relocated in the future
-    public static final String PRESTISSIMO_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "simplified_expression_evaluation_enabled";
+    public static final String RANDOMIZE_OUTER_JOIN_NULL_KEY = "randomize_outer_join_null_key";
     public static final String KEY_BASED_SAMPLING_ENABLED = "key_based_sampling_enabled";
     public static final String KEY_BASED_SAMPLING_PERCENTAGE = "key_based_sampling_percentage";
     public static final String KEY_BASED_SAMPLING_FUNCTION = "key_based_sampling_function";
     public static final String HASH_BASED_DISTINCT_LIMIT_ENABLED = "hash_based_distinct_limit_enabled";
     public static final String HASH_BASED_DISTINCT_LIMIT_THRESHOLD = "hash_based_distinct_limit_threshold";
     public static final String QUICK_DISTINCT_LIMIT_ENABLED = "quick_distinct_limit_enabled";
+    public static final String OPTIMIZE_CONDITIONAL_AGGREGATION_ENABLED = "optimize_conditional_aggregation_enabled";
+
+    // TODO: Native execution related session properties that are temporarily put here. They will be relocated in the future.
+    public static final String NATIVE_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "simplified_expression_evaluation_enabled";
+    public static final String NATIVE_AGGREGATION_SPILL_MEMORY_THRESHOLD = "aggregation_spill_memory_threshold";
     public static final String NATIVE_EXECUTION_ENABLED = "native_execution_enabled";
     public static final String NATIVE_EXECUTION_EXECUTABLE_PATH = "native_execution_executable_path";
 
@@ -1253,11 +1256,6 @@ public final class SystemSessionProperties
                         false,
                         value -> AggregationIfToFilterRewriteStrategy.valueOf(((String) value).toUpperCase()),
                         AggregationIfToFilterRewriteStrategy::name),
-                booleanProperty(
-                        PRESTISSIMO_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED,
-                        "Enable simplified path in expression evaluation",
-                        false,
-                        false),
                 new PropertyMetadata<>(
                         RESOURCE_AWARE_SCHEDULING_STRATEGY,
                         format("Task assignment strategy to use. Options are %s",
@@ -1357,6 +1355,16 @@ public final class SystemSessionProperties
                         featuresConfig.isOptimizeMultipleApproxPercentileOnSameFieldEnabled(),
                         false),
                 booleanProperty(
+                        NATIVE_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED,
+                        "Native Execution only. Enable simplified path in expression evaluation",
+                        false,
+                        false),
+                integerProperty(
+                        NATIVE_AGGREGATION_SPILL_MEMORY_THRESHOLD,
+                        "Native Execution only. The max memory that a final aggregation can use before spilling. If it is 0, then there is no limit",
+                        0,
+                        false),
+                booleanProperty(
                         NATIVE_EXECUTION_ENABLED,
                         "Enable execution on native engine",
                         featuresConfig.isNativeExecutionEnabled(),
@@ -1365,6 +1373,16 @@ public final class SystemSessionProperties
                         NATIVE_EXECUTION_EXECUTABLE_PATH,
                         "The native engine executable file path for native engine execution",
                         featuresConfig.getNativeExecutionExecutablePath(),
+                        false),
+                booleanProperty(
+                        RANDOMIZE_OUTER_JOIN_NULL_KEY,
+                        "Randomize null join key for outer join",
+                        featuresConfig.isRandomizeOuterJoinNullKeyEnabled(),
+                        false),
+                booleanProperty(
+                        OPTIMIZE_CONDITIONAL_AGGREGATION_ENABLED,
+                        "Enable rewriting IF(condition, AGG(x)) to AGG(x) with condition included in mask",
+                        featuresConfig.isOptimizeConditionalAggregationEnabled(),
                         false));
     }
 
@@ -2299,5 +2317,15 @@ public final class SystemSessionProperties
     public static String getNativeExecutionExecutablePath(Session session)
     {
         return session.getSystemProperty(NATIVE_EXECUTION_EXECUTABLE_PATH, String.class);
+    }
+
+    public static boolean randomizeOuterJoinNullKeyEnabled(Session session)
+    {
+        return session.getSystemProperty(RANDOMIZE_OUTER_JOIN_NULL_KEY, Boolean.class);
+    }
+
+    public static boolean isOptimizeConditionalAggregationEnabled(Session session)
+    {
+        return session.getSystemProperty(OPTIMIZE_CONDITIONAL_AGGREGATION_ENABLED, Boolean.class);
     }
 }
