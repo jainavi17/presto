@@ -43,8 +43,6 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
 
 import static com.facebook.airlift.http.server.AsyncResponseHandler.bindAsyncResponse;
-import static com.facebook.presto.client.PrestoHeaders.PRESTO_PREFIX_URL;
-import static com.facebook.presto.server.protocol.QueryResourceUtil.abortIfPrefixUrlInvalid;
 import static com.facebook.presto.server.protocol.QueryResourceUtil.toResponse;
 import static com.facebook.presto.server.security.RoleType.USER;
 import static com.google.common.base.Strings.isNullOrEmpty;
@@ -100,7 +98,6 @@ public class ExecutingStatementResource
             @QueryParam("maxWait") Duration maxWait,
             @QueryParam("targetResultSize") DataSize targetResultSize,
             @HeaderParam(X_FORWARDED_PROTO) String proto,
-            @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
             @Context UriInfo uriInfo,
             @Suspended AsyncResponse asyncResponse)
     {
@@ -115,8 +112,6 @@ public class ExecutingStatementResource
             proto = uriInfo.getRequestUri().getScheme();
         }
 
-        abortIfPrefixUrlInvalid(xPrestoPrefixUrl);
-
         Query query = queryProvider.getQuery(queryId, slug);
         ListenableFuture<Double> acquirePermitAsync = queryRateLimiter.acquire(queryId);
         String effectiveFinalProto = proto;
@@ -130,7 +125,7 @@ public class ExecutingStatementResource
                 responseExecutor);
         ListenableFuture<Response> queryResultsFuture = transform(
                 waitForResultsAsync,
-                results -> toResponse(query, results, xPrestoPrefixUrl, compressionEnabled),
+                results -> toResponse(query, results, compressionEnabled),
                 directExecutor());
         bindAsyncResponse(asyncResponse, queryResultsFuture, responseExecutor);
     }

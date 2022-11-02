@@ -60,10 +60,7 @@ public class TestOrcFileWriterConfig
                 .setDwrfStripeCacheEnabled(false)
                 .setDwrfStripeCacheMaxSize(new DataSize(8, MEGABYTE))
                 .setDwrfStripeCacheMode(INDEX_AND_FOOTER)
-                .setCompressionLevel(Integer.MIN_VALUE)
-                .setIntegerDictionaryEncodingEnabled(false)
-                .setStringDictionaryEncodingEnabled(true)
-                .setStringDictionarySortingEnabled(true));
+                .setCompressionLevel(Integer.MIN_VALUE));
     }
 
     @Test
@@ -82,9 +79,6 @@ public class TestOrcFileWriterConfig
                 .put("hive.orc.writer.dwrf-stripe-cache-max-size", "10MB")
                 .put("hive.orc.writer.dwrf-stripe-cache-mode", "FOOTER")
                 .put("hive.orc.writer.compression-level", "5")
-                .put("hive.orc.writer.integer-dictionary-encoding-enabled", "true")
-                .put("hive.orc.writer.string-dictionary-encoding-enabled", "false")
-                .put("hive.orc.writer.string-dictionary-sorting-enabled", "false")
                 .build();
 
         OrcFileWriterConfig expected = new OrcFileWriterConfig()
@@ -99,10 +93,7 @@ public class TestOrcFileWriterConfig
                 .setDwrfStripeCacheEnabled(true)
                 .setDwrfStripeCacheMaxSize(new DataSize(10, MEGABYTE))
                 .setDwrfStripeCacheMode(FOOTER)
-                .setCompressionLevel(5)
-                .setIntegerDictionaryEncodingEnabled(true)
-                .setStringDictionaryEncodingEnabled(false)
-                .setStringDictionarySortingEnabled(false);
+                .setCompressionLevel(5);
 
         assertFullMapping(properties, expected);
     }

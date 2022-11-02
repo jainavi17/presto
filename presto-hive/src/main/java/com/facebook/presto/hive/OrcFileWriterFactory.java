@@ -72,9 +72,6 @@ import static com.facebook.presto.hive.HiveSessionProperties.getOrcStreamBufferS
 import static com.facebook.presto.hive.HiveSessionProperties.getOrcStringStatisticsLimit;
 import static com.facebook.presto.hive.HiveSessionProperties.isDwrfWriterStripeCacheEnabled;
 import static com.facebook.presto.hive.HiveSessionProperties.isExecutionBasedMemoryAccountingEnabled;
-import static com.facebook.presto.hive.HiveSessionProperties.isIntegerDictionaryEncodingEnabled;
-import static com.facebook.presto.hive.HiveSessionProperties.isStringDictionaryEncodingEnabled;
-import static com.facebook.presto.hive.HiveSessionProperties.isStringDictionarySortingEnabled;
 import static com.facebook.presto.hive.HiveType.toHiveTypes;
 import static com.facebook.presto.orc.OrcEncoding.DWRF;
 import static com.facebook.presto.orc.OrcEncoding.ORC;
@@ -234,9 +231,6 @@ public class OrcFileWriterFactory
                                     .withStripeMaxRowCount(getOrcOptimizedWriterMaxStripeRows(session))
                                     .build())
                             .withDictionaryMaxMemory(getOrcOptimizedWriterMaxDictionaryMemory(session))
-                            .withIntegerDictionaryEncodingEnabled(isIntegerDictionaryEncodingEnabled(session))
-                            .withStringDictionaryEncodingEnabled(isStringDictionaryEncodingEnabled(session))
-                            .withStringDictionarySortingEnabled(isStringDictionarySortingEnabled(session))
                             .withMaxStringStatisticsLimit(getOrcStringStatisticsLimit(session))
                             .withIgnoreDictionaryRowGroupSizes(isExecutionBasedMemoryAccountingEnabled(session))
                             .withDwrfStripeCacheEnabled(isDwrfWriterStripeCacheEnabled(session))

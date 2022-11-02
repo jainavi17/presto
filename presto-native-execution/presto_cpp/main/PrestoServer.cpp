@@ -39,7 +39,6 @@
 #include "velox/exec/Driver.h"
 #include "velox/exec/PartitionedOutputBufferManager.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
-#include "velox/functions/prestosql/window/WindowFunctionsRegistration.h"
 #include "velox/serializers/PrestoSerializer.h"
 
 #ifdef PRESTO_ENABLE_PARQUET
@@ -227,7 +226,6 @@ void PrestoServer::run() {
       });
 
   velox::functions::prestosql::registerAllScalarFunctions();
-  velox::window::registerWindowFunctions();
   if (!velox::isRegisteredVectorSerde()) {
     velox::serializer::presto::PrestoVectorSerde::registerVectorSerde();
   }
@@ -344,9 +342,6 @@ void PrestoServer::initializeAsyncCache() {
 
   memory::MmapAllocatorOptions options;
   options.capacity = memoryBytes;
-  options.useMmapArena = systemConfig->useMmapArena();
-  options.mmapArenaCapacityRatio = systemConfig->mmapArenaCapacityRatio();
-  
   auto allocator = std::make_shared<memory::MmapAllocator>(options);
   mappedMemory_ = std::make_shared<cache::AsyncDataCache>(
       allocator, memoryBytes, std::move(ssd));

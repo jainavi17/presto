@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.spark.execution;
 
+import com.facebook.presto.execution.TaskId;
 import com.facebook.presto.operator.PageBufferClient;
 import com.facebook.presto.spark.execution.http.PrestoSparkHttpWorkerClient;
 import com.facebook.presto.spi.HostAddress;
@@ -22,7 +23,6 @@ import io.airlift.units.DataSize;
 import io.airlift.units.Duration;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -40,12 +40,12 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * This class helps to fetch results for a native task through HTTP communications with a Presto worker. The object of this class will give back a {@link CompletableFuture} to the
- * caller upon start(). This future will be completed when retrievals of all results by the fetcher is completed. Results are retrieved and stored in an internal buffer, which is
- * supposed to be polled by the caller. Note that the completion of the future does not mean all results have been consumed by the caller. The caller is responsible for making sure
- * all results be consumed after future completion.
- * There is a capacity cap (MAX_BUFFER_SIZE) for internal buffer managed by {@link HttpNativeExecutionTaskResultFetcher}. The fetcher will stop fetching results when buffer limit
- * is hit and resume fetching after some of the buffer has been consumed, bringing buffer size down below the limit.
+ * This class helps to fetch results for a native task through HTTP communications with a Presto worker. The object of this class will give back a CompletableFuture to the caller
+ * upon start(). This future will be completed when retrievals of results by the fetcher is completed. Results are retrieved and stored in an internal buffer, which is supposed to
+ * be polled by the caller. Note that the completion of the future does not mean all results have been consumed by the caller. The caller is responsible for making sure all results
+ * be consumed after future completion.
+ * There is a capacity cap (MAX_BUFFER_SIZE) for internal buffer managed by HttpNativeExecutionTaskResultFetcher. The fetcher will stop fetching results when buffer limit is hit
+ * and resume fetching after some of the buffer has been consumed and buffer size comes down below the limit.
  * <p>
  * The fetcher specifically serves to fetch table write commit metadata results from Presto worker so currently no shuffle result fetching is supported.
  */
@@ -53,27 +53,38 @@ public class HttpNativeExecutionTaskResultFetcher
 {
     private static final Duration FETCH_INTERVAL = new Duration(200, TimeUnit.MILLISECONDS);
     private static final Duration POLL_TIMEOUT = new Duration(100, TimeUnit.MILLISECONDS);
-    private static final Duration REQUEST_TIMEOUT = new Duration(200, TimeUnit.MILLISECONDS);
     private static final DataSize MAX_BUFFER_SIZE = new DataSize(128, DataSize.Unit.MEGABYTE);
 
     private final ScheduledExecutorService scheduler;
     private final PrestoSparkHttpWorkerClient workerClient;
     // Timeout for each fetching request
     private final Duration requestTimeout;
+    private final TaskId taskId;
     private final LinkedBlockingDeque<SerializedPage> pageBuffer = new LinkedBlockingDeque<>();
     private final AtomicLong bufferMemoryBytes;
 
     private ScheduledFuture<?> schedulerFuture;
     private boolean started;
 
+    /**
+     * The instance of this class helps to fetch results from remote Presto
+     * worker. When start() is called, the fetcher polls the remote result
+     * endpoint in a fixed interval until all results fetched or exceptions
+     * occur. A CompletableFuture is returned for result retrieving completion
+     * signalling. Callers are responsible to call pollPage() constantly to get
+     * retrieved pages. Exceptions will be wrapped inside of the
+     * CompletableFuture in case any occur.
+     */
     public HttpNativeExecutionTaskResultFetcher(
             ScheduledExecutorService scheduler,
             PrestoSparkHttpWorkerClient workerClient,
-            Optional<Duration> requestTimeout)
+            TaskId taskId,
+            Duration requestTimeout)
     {
         this.scheduler = requireNonNull(scheduler, "scheduler is null");
         this.workerClient = requireNonNull(workerClient, "workerClient is null");
-        this.requestTimeout = requestTimeout.orElse(REQUEST_TIMEOUT);
+        this.taskId = requireNonNull(taskId, "taskId is null");
+        this.requestTimeout = requireNonNull(requestTimeout, "requestTimeout is null");
         this.bufferMemoryBytes = new AtomicLong();
     }
 
@@ -82,12 +93,13 @@ public class HttpNativeExecutionTaskResultFetcher
         if (started) {
             throw new PrestoException(
                     GENERIC_INTERNAL_ERROR,
-                    "trying to start an already started TaskResultFetcher");
+                    "trying to start an already started TaskResultFetcher for '" + taskId + "'");
         }
         CompletableFuture<Void> future = new CompletableFuture<>();
         schedulerFuture = scheduler.scheduleAtFixedRate(
                 new HttpNativeExecutionTaskResultFetcherRunner(
                         workerClient,
+                        taskId,
                         future,
                         pageBuffer,
                         requestTimeout,
@@ -107,37 +119,30 @@ public class HttpNativeExecutionTaskResultFetcher
                 });
     }
 
-    public void stop()
-    {
-        if (schedulerFuture != null) {
-            schedulerFuture.cancel(false);
-        }
-    }
-
     /**
      * Blocking call to poll from result buffer. Blocks until content becomes
      * available in the buffer, or until timeout is hit.
      *
-     * @return the first {@link SerializedPage} result buffer contains.
+     * @return the first SerializedPage result buffer contains.
      */
-    public Optional<SerializedPage> pollPage()
+    public SerializedPage pollPage()
             throws InterruptedException
     {
         SerializedPage page = pageBuffer.poll((long) POLL_TIMEOUT.getValue(), POLL_TIMEOUT.getUnit());
         if (page != null) {
             bufferMemoryBytes.addAndGet(-page.getSizeInBytes());
-            return Optional.of(page);
         }
-        return Optional.empty();
+        return page;
     }
 
     private static class HttpNativeExecutionTaskResultFetcherRunner
             implements Runnable
     {
         private static final DataSize MAX_RESPONSE_SIZE = new DataSize(32, DataSize.Unit.MEGABYTE);
-        private static final int MAX_HTTP_TIMEOUT_RETRIES = 5;
+        private static final int MAX_HTTP_TIMEOUT_RETRIES = 3;
 
         private final Duration requestTimeout;
+        private final TaskId taskId;
         private final PrestoSparkHttpWorkerClient client;
         private final LinkedBlockingDeque<SerializedPage> pageBuffer;
         private final AtomicLong bufferMemoryBytes;
@@ -148,6 +153,7 @@ public class HttpNativeExecutionTaskResultFetcher
 
         public HttpNativeExecutionTaskResultFetcherRunner(
                 PrestoSparkHttpWorkerClient client,
+                TaskId taskId,
                 CompletableFuture<Void> future,
                 LinkedBlockingDeque<SerializedPage> pageBuffer,
                 Duration requestTimeout,
@@ -155,6 +161,7 @@ public class HttpNativeExecutionTaskResultFetcher
         {
             this.timeoutRetries = 0;
             this.token = 0;
+            this.taskId = requireNonNull(taskId, "taskId is null");
             this.client = requireNonNull(client, "client is null");
             this.future = requireNonNull(future, "future is null");
             this.pageBuffer = requireNonNull(pageBuffer, "pageBuffer is null");

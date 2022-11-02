@@ -20,7 +20,6 @@ import com.facebook.presto.parquet.ParquetCorruptionException;
 import com.facebook.presto.parquet.ParquetDataSource;
 import com.facebook.presto.parquet.ParquetEncoding;
 import com.facebook.presto.parquet.RichColumnDescriptor;
-import com.facebook.presto.spi.WarningCollector;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -87,39 +86,11 @@ public final class PredicateUtils
         return new TupleDomainParquetPredicate(parquetTupleDomain, columnReferences.build());
     }
 
-    public static boolean predicateMatches(
-            Predicate parquetPredicate,
-            BlockMetaData block,
-            ParquetDataSource dataSource,
-            Map<List<String>, RichColumnDescriptor> descriptorsByPath,
-            TupleDomain<ColumnDescriptor> parquetTupleDomain,
-            Optional<ColumnIndexStore> columnIndexStore,
-            boolean readColumnIndex)
+    public static boolean predicateMatches(Predicate parquetPredicate, BlockMetaData block, ParquetDataSource dataSource, Map<List<String>, RichColumnDescriptor> descriptorsByPath, TupleDomain<ColumnDescriptor> parquetTupleDomain, Optional<ColumnIndexStore> columnIndexStore, boolean readColumnIndex)
             throws ParquetCorruptionException
     {
-        return predicateMatches(
-                parquetPredicate,
-                block,
-                dataSource,
-                descriptorsByPath,
-                parquetTupleDomain,
-                columnIndexStore,
-                readColumnIndex,
-                Optional.empty());
-    }
-
-    public static boolean predicateMatches(
-            Predicate parquetPredicate,
-            BlockMetaData block,
-            ParquetDataSource dataSource,
-            Map<List<String>, RichColumnDescriptor> descriptorsByPath,
-            TupleDomain<ColumnDescriptor> parquetTupleDomain,
-            Optional<ColumnIndexStore> columnIndexStore,
-            boolean readColumnIndex,
-            Optional<WarningCollector> warningCollector)
-    {
         Map<ColumnDescriptor, Statistics<?>> columnStatistics = getStatistics(block, descriptorsByPath);
-        if (!parquetPredicate.matches(block.getRowCount(), columnStatistics, dataSource.getId(), warningCollector)) {
+        if (!parquetPredicate.matches(block.getRowCount(), columnStatistics, dataSource.getId())) {
             return false;
         }
 

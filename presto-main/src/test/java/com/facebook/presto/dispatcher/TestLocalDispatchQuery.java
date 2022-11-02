@@ -15,7 +15,6 @@ package com.facebook.presto.dispatcher;
 
 import com.facebook.airlift.node.NodeInfo;
 import com.facebook.presto.Session;
-import com.facebook.presto.cost.HistoryBasedOptimizationConfig;
 import com.facebook.presto.cost.HistoryBasedPlanStatisticsManager;
 import com.facebook.presto.event.QueryMonitor;
 import com.facebook.presto.event.QueryMonitorConfig;
@@ -454,7 +453,7 @@ public class TestLocalDispatchQuery
                 new SessionPropertyManager(),
                 metadata,
                 new QueryMonitorConfig(),
-                new HistoryBasedPlanStatisticsManager(new ObjectMapper(), new SessionPropertyManager(), metadata, new HistoryBasedOptimizationConfig()));
+                new HistoryBasedPlanStatisticsManager(new ObjectMapper(), new SessionPropertyManager()));
     }
 
     private EventListenerManager createEventListenerManager(CountingEventListener countingEventListener)

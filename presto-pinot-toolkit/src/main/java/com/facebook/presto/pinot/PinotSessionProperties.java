@@ -47,7 +47,6 @@ public class PinotSessionProperties
     public static final String CONTROLLER_AUTHENTICATION_PASSWORD = "controller_authentication_password";
     public static final String BROKER_AUTHENTICATION_USER = "broker_authentication_user";
     public static final String BROKER_AUTHENTICATION_PASSWORD = "broker_authentication_password";
-    public static final String QUERY_OPTIONS = "query_options";
 
     private final List<PropertyMetadata<?>> sessionProperties;
 
@@ -137,11 +136,6 @@ public class PinotSessionProperties
         return session.getProperty(BROKER_AUTHENTICATION_PASSWORD, String.class);
     }
 
-    public static String getQueryOptions(ConnectorSession session)
-    {
-        return session.getProperty(QUERY_OPTIONS, String.class);
-    }
-
     @Inject
     public PinotSessionProperties(PinotConfig pinotConfig)
     {
@@ -210,11 +204,6 @@ public class PinotSessionProperties
                         BROKER_AUTHENTICATION_PASSWORD,
                         "Broker authentication password",
                         pinotConfig.getBrokerAuthenticationPassword(),
-                        false),
-                stringProperty(
-                        QUERY_OPTIONS,
-                        "Query Options, in the format of k1:v1,k2:v2",
-                        pinotConfig.getQueryOptions(),
                         false),
                 booleanProperty(
                         USE_DATE_TRUNC,

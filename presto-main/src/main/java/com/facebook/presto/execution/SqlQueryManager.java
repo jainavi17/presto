@@ -281,7 +281,7 @@ public class SqlQueryManager
 
         stats.trackQueryStats(queryExecution);
         // TODO(pranjalssh): Support plan statistics tracking for other query managers
-        historyBasedPlanStatisticsTracker.updateStatistics(queryExecution);
+        historyBasedPlanStatisticsTracker.trackStatistics(queryExecution);
 
         embedVersion.embedVersion(queryExecution::start).run();
     }

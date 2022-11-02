@@ -17,7 +17,6 @@ package com.facebook.presto.spi.statistics;
 import com.facebook.drift.annotations.ThriftConstructor;
 import com.facebook.drift.annotations.ThriftField;
 import com.facebook.drift.annotations.ThriftStruct;
-import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Objects;
@@ -59,9 +58,8 @@ public final class Estimate
         return new Estimate(value);
     }
 
-    @JsonCreator
     @ThriftConstructor
-    public Estimate(@JsonProperty("value") double value)
+    public Estimate(double value)
     {
         this.value = value;
     }

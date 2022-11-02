@@ -100,8 +100,7 @@ std::shared_ptr<core::QueryCtx> QueryContextManager::findOrCreateQueryCtx(
       connectorConfigs,
       memory::MappedMemory::getInstance(),
       std::move(pool),
-      spillExecutor(),
-      queryId);
+      spillExecutor());
 
   return lockedCache->insert(queryId, queryCtx);
 }

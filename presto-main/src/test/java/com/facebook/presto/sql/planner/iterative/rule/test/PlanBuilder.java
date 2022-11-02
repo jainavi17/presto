@@ -69,7 +69,6 @@ import com.facebook.presto.sql.planner.plan.IndexJoinNode;
 import com.facebook.presto.sql.planner.plan.IndexSourceNode;
 import com.facebook.presto.sql.planner.plan.JoinNode;
 import com.facebook.presto.sql.planner.plan.LateralJoinNode;
-import com.facebook.presto.sql.planner.plan.NativeExecutionNode;
 import com.facebook.presto.sql.planner.plan.OffsetNode;
 import com.facebook.presto.sql.planner.plan.OutputNode;
 import com.facebook.presto.sql.planner.plan.RowNumberNode;
@@ -955,14 +954,6 @@ public class PlanBuilder
                 replicateVariables,
                 unnestVariables,
                 ordinalityVariable);
-    }
-
-    public NativeExecutionNode nativeExecution(PlanNode subPlan)
-    {
-        return new NativeExecutionNode(
-                Optional.empty(),
-                idAllocator.getNextId(),
-                subPlan);
     }
 
     public static Expression expression(String sql)

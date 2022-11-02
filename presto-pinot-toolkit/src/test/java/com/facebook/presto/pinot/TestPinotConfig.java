@@ -72,8 +72,7 @@ public class TestPinotConfig
                         .setControllerAuthenticationPassword(null)
                         .setBrokerAuthenticationType("NONE")
                         .setBrokerAuthenticationUser(null)
-                        .setBrokerAuthenticationPassword(null)
-                        .setQueryOptions(null));
+                        .setBrokerAuthenticationPassword(null));
     }
 
     @Test
@@ -122,7 +121,6 @@ public class TestPinotConfig
                 .put("pinot.broker-authentication-type", "PASSWORD")
                 .put("pinot.broker-authentication-user", "admin")
                 .put("pinot.broker-authentication-password", "verysecret")
-                .put("pinot.query-options", "enableNullHandling:true,skipUpsert:true")
                 .build();
 
         PinotConfig expected = new PinotConfig()
@@ -168,8 +166,7 @@ public class TestPinotConfig
                 .setBrokerAuthenticationType("PASSWORD")
                 .setBrokerAuthenticationUser("admin")
                 .setBrokerAuthenticationPassword("verysecret")
-                .setUseSecureConnection(true)
-                .setQueryOptions("enableNullHandling:true,skipUpsert:true");
+                .setUseSecureConnection(true);
 
         ConfigAssertions.assertFullMapping(properties, expected);
     }

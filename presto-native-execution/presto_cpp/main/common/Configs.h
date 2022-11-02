@@ -90,9 +90,6 @@ class SystemConfig : public ConfigBase {
   static constexpr std::string_view kAsyncCacheSsdPath{"async-cache-ssd-path"};
   static constexpr std::string_view kEnableSerializedPageChecksum{
       "enable-serialized-page-checksum"};
-  static constexpr std::string_view kUseMmapArena{"use-mmap-arena"};
-  static constexpr std::string_view kMmapArenaCapacityRatio{
-      "mmap-arena-capacity-ratio"};
   static constexpr std::string_view kEnableVeloxTaskLogging{
       "enable_velox_task_logging"};
   static constexpr std::string_view kEnableVeloxExprSetLogging{
@@ -106,14 +103,12 @@ class SystemConfig : public ConfigBase {
   static constexpr int32_t kNumIoThreadsDefault = 30;
   static constexpr int32_t kShutdownOnsetSecDefault = 10;
   static constexpr int32_t kSystemMemoryGbDefault = 40;
-  static constexpr int32_t kMmapArenaCapacityRatioDefault = 10;
-  static constexpr uint64_t kAsyncCacheSsdGbDefault = 0;
+  static constexpr int32_t kAsyncCacheSsdGbDefault = 0;
   static constexpr std::string_view kAsyncCacheSsdPathDefault{
       "/mnt/flash/async_cache."};
   static constexpr bool kEnableSerializedPageChecksumDefault = true;
   static constexpr bool kEnableVeloxTaskLoggingDefault = false;
   static constexpr bool kEnableVeloxExprSetLoggingDefault = false;
-  static constexpr bool kUseMmapArenaDefault = false;
 
   static SystemConfig* instance();
 
@@ -137,7 +132,7 @@ class SystemConfig : public ConfigBase {
 
   int32_t systemMemoryGb() const;
 
-  uint64_t asyncCacheSsdGb() const;
+  int32_t asyncCacheSsdGb() const;
 
   std::string asyncCacheSsdPath() const;
 
@@ -146,10 +141,6 @@ class SystemConfig : public ConfigBase {
   bool enableVeloxTaskLogging() const;
 
   bool enableVeloxExprSetLogging() const;
-
-  bool useMmapArena() const;
-
-  int32_t mmapArenaCapacityRatio() const;
 };
 
 /// Provides access to node properties defined in node.properties file.

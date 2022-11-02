@@ -85,10 +85,4 @@ public class TestingWarningCollector
         // See the SQL Standard ISO_IEC_9075-2E_2016 24.1: SQLState for more information
         return new PrestoWarning(new WarningCode(code, format("015%02d", code % 100)), "Test warning " + code);
     }
-
-    @VisibleForTesting
-    public void clear()
-    {
-        warnings.clear();
-    }
 }

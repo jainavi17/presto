@@ -16,7 +16,6 @@ package com.facebook.presto.operator;
 import com.facebook.presto.common.Page;
 import com.facebook.presto.common.block.SortOrder;
 import com.facebook.presto.common.type.Type;
-import com.facebook.presto.execution.ScheduledSplit;
 import com.facebook.presto.execution.buffer.PagesSerdeFactory;
 import com.facebook.presto.metadata.Split;
 import com.facebook.presto.spi.UpdatablePageSource;
@@ -153,9 +152,8 @@ public class MergeOperator
     }
 
     @Override
-    public Supplier<Optional<UpdatablePageSource>> addSplit(ScheduledSplit scheduledSplit)
+    public Supplier<Optional<UpdatablePageSource>> addSplit(Split split)
     {
-        Split split = requireNonNull(scheduledSplit, "scheduledSplit is null").getSplit();
         requireNonNull(split, "split is null");
         checkArgument(split.getConnectorSplit() instanceof RemoteSplit, "split is not a remote split");
         checkState(!blockedOnSplits.isDone(), "noMoreSplits has been called already");

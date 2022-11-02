@@ -13,8 +13,8 @@
  */
 package com.facebook.presto.parquet.predicate;
 
+import com.facebook.presto.parquet.ParquetCorruptionException;
 import com.facebook.presto.parquet.ParquetDataSourceId;
-import com.facebook.presto.spi.WarningCollector;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.statistics.Statistics;
 import org.apache.parquet.internal.filter2.columnindex.ColumnIndexStore;
@@ -27,7 +27,8 @@ public interface Predicate
     Predicate TRUE = new Predicate()
     {
         @Override
-        public boolean matches(long numberOfRows, Map<ColumnDescriptor, Statistics<?>> statistics, ParquetDataSourceId id, Optional<WarningCollector> warningCollector)
+        public boolean matches(long numberOfRows, Map<ColumnDescriptor, Statistics<?>> statistics, ParquetDataSourceId id)
+                throws ParquetCorruptionException
         {
             return true;
         }
@@ -52,9 +53,9 @@ public interface Predicate
      * Statistics to determine if a column is only null
      * @param statistics column statistics
      * @param id Parquet file name
-     * @param warningCollector Presto WarningCollector that is used to collect warnings when the statistics is corrupt
      */
-    boolean matches(long numberOfRows, Map<ColumnDescriptor, Statistics<?>> statistics, ParquetDataSourceId id, Optional<WarningCollector> warningCollector);
+    boolean matches(long numberOfRows, Map<ColumnDescriptor, Statistics<?>> statistics, ParquetDataSourceId id)
+            throws ParquetCorruptionException;
 
     /**
      * Should the Parquet Reader process a file section with the specified dictionary based on that

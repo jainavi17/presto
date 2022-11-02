@@ -421,7 +421,8 @@ class TaskManagerTest : public testing::Test {
       partialAggTasks.emplace_back(taskInfo->taskStatus.self);
     }
 
-    auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
+    auto planNodeIdGenerator =
+        std::make_shared<exec::test::PlanNodeIdGenerator>();
 
     // Create final-agg tasks
     auto finalAggBuilder = exec::test::PlanBuilder(planNodeIdGenerator);

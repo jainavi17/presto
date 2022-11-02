@@ -150,7 +150,6 @@ public final class HttpRequestSessionContext
                 parseRoleHeaders(servletRequest),
                 parseExtraCredentials(servletRequest),
                 ImmutableMap.of(),
-                Optional.empty(),
                 Optional.empty());
 
         X509Certificate[] certs = (X509Certificate[]) servletRequest.getAttribute(X509_ATTRIBUTE);

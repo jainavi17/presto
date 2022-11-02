@@ -54,7 +54,6 @@ public class PinotConnection
                 .refreshAfterWrite(metadataCacheExpiryMillis, TimeUnit.MILLISECONDS)
                 .build(asyncReloading(CacheLoader.from(pinotClusterInfoFetcher::getAllTables), executor));
 
-        boolean nullHandlingEnabled = PinotQueryOptionsUtils.isNullHandlingEnabled(pinotConfig.getQueryOptions());
         this.pinotTableColumnCache =
                 CacheBuilder.newBuilder()
                         .refreshAfterWrite(metadataCacheExpiryMillis, TimeUnit.MILLISECONDS)
@@ -65,7 +64,7 @@ public class PinotConnection
                                     throws Exception
                             {
                                 Schema tablePinotSchema = pinotClusterInfoFetcher.getTableSchema(tableName);
-                                return PinotColumnUtils.getPinotColumnsForPinotSchema(tablePinotSchema, pinotConfig.isInferDateTypeInSchema(), pinotConfig.isInferTimestampTypeInSchema(), nullHandlingEnabled);
+                                return PinotColumnUtils.getPinotColumnsForPinotSchema(tablePinotSchema, pinotConfig.isInferDateTypeInSchema(), pinotConfig.isInferTimestampTypeInSchema());
                             }
                         }, executor));
 

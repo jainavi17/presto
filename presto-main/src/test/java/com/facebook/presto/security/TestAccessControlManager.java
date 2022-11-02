@@ -170,7 +170,6 @@ public class TestAccessControlManager
                         ImmutableMap.of(),
                         ImmutableMap.of(QUERY_TOKEN_FIELD, testQuery),
                         ImmutableMap.of(),
-                        Optional.empty(),
                         Optional.empty()),
                 context,
                 testQuery);
@@ -187,7 +186,6 @@ public class TestAccessControlManager
                                 ImmutableMap.of(),
                                 ImmutableMap.of(QUERY_TOKEN_FIELD, testQuery + " modified"),
                                 ImmutableMap.of(),
-                                Optional.empty(),
                                 Optional.empty()),
                         context,
                         testQuery));

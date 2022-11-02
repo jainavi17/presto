@@ -22,7 +22,6 @@ import com.facebook.presto.common.function.SqlFunctionProperties;
 import com.facebook.presto.common.type.RowType;
 import com.facebook.presto.common.type.TimeZoneKey;
 import com.facebook.presto.common.type.Type;
-import com.facebook.presto.execution.ScheduledSplit;
 import com.facebook.presto.metadata.FunctionAndTypeManager;
 import com.facebook.presto.metadata.FunctionListBuilder;
 import com.facebook.presto.metadata.Metadata;
@@ -662,7 +661,7 @@ public final class FunctionAssertions
     private Object selectSingleValue(SourceOperatorFactory operatorFactory, Type type, Split split, Session session)
     {
         SourceOperator operator = operatorFactory.createOperator(createDriverContext(session));
-        operator.addSplit(new ScheduledSplit(0, operator.getSourceId(), split));
+        operator.addSplit(split);
         operator.noMoreSplits();
         return selectSingleValue(operator, type);
     }
@@ -828,7 +827,7 @@ public final class FunctionAssertions
     private static boolean executeFilter(SourceOperatorFactory operatorFactory, Split split, Session session)
     {
         SourceOperator operator = operatorFactory.createOperator(createDriverContext(session));
-        operator.addSplit(new ScheduledSplit(0, operator.getSourceId(), split));
+        operator.addSplit(split);
         operator.noMoreSplits();
         return executeFilter(operator);
     }

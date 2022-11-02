@@ -864,9 +864,8 @@ public class TestSqlTaskExecution
             }
 
             @Override
-            public Supplier<Optional<UpdatablePageSource>> addSplit(ScheduledSplit scheduledSplit)
+            public Supplier<Optional<UpdatablePageSource>> addSplit(Split split)
             {
-                Split split = requireNonNull(scheduledSplit, "scheduledSplit is null").getSplit();
                 requireNonNull(split, "split is null");
                 checkState(this.split == null, "Table scan split already set");
 

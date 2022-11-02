@@ -77,7 +77,7 @@ public class TempStorageSingleStreamSpiller
     private TempStorageHandle tempStorageHandle;
     private int bufferedBytes;
     private List<DataOutput> bufferedPages = new ArrayList<>();
-    private volatile long spilledPagesInMemorySize;
+    private long spilledPagesInMemorySize;
     private ListenableFuture<?> spillInProgress = Futures.immediateFuture(null);
 
     public TempStorageSingleStreamSpiller(

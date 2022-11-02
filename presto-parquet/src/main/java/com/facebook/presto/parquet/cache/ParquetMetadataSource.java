@@ -26,7 +26,6 @@ public interface ParquetMetadataSource
             long fileSize,
             boolean cacheable,
             long modificationTime,
-            Optional<InternalFileDecryptor> fileDecryptor,
-            boolean readMaskedValue)
+            Optional<InternalFileDecryptor> fileDecryptor)
             throws IOException;
 }

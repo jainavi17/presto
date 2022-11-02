@@ -96,8 +96,8 @@ int32_t SystemConfig::systemMemoryGb() const {
   return opt.hasValue() ? opt.value() : kSystemMemoryGbDefault;
 }
 
-uint64_t SystemConfig::asyncCacheSsdGb() const {
-  auto opt = optionalProperty<uint64_t>(std::string(kAsyncCacheSsdGb));
+int32_t SystemConfig::asyncCacheSsdGb() const {
+  auto opt = optionalProperty<int32_t>(std::string(kAsyncCacheSsdGb));
   return opt.hasValue() ? opt.value() : kAsyncCacheSsdGbDefault;
 }
 
@@ -123,16 +123,6 @@ bool SystemConfig::enableVeloxExprSetLogging() const {
       optionalProperty<bool>(std::string(kEnableVeloxExprSetLogging));
   return loggingOpt.hasValue() ? loggingOpt.value()
                                : kEnableVeloxExprSetLoggingDefault;
-}
-
-bool SystemConfig::useMmapArena() const {
-  auto opt = optionalProperty<bool>(std::string(kUseMmapArena));
-  return opt.hasValue() ? opt.value() : kUseMmapArenaDefault;
-}
-
-int32_t SystemConfig::mmapArenaCapacityRatio() const {
-  auto opt = optionalProperty<int32_t>(std::string(kMmapArenaCapacityRatio));
-  return opt.hasValue() ? opt.value() : kMmapArenaCapacityRatioDefault;
 }
 
 NodeConfig* NodeConfig::instance() {
