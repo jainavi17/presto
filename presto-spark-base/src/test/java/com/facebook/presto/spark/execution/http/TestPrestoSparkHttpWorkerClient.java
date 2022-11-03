@@ -24,9 +24,11 @@ import com.facebook.airlift.json.JsonCodec;
 import com.facebook.presto.execution.ScheduledSplit;
 import com.facebook.presto.execution.TaskId;
 import com.facebook.presto.execution.TaskInfo;
+import com.facebook.presto.execution.TaskManagerConfig;
 import com.facebook.presto.execution.TaskSource;
 import com.facebook.presto.execution.scheduler.TableWriteInfo;
 import com.facebook.presto.operator.PageBufferClient;
+import com.facebook.presto.operator.PageTransportErrorException;
 import com.facebook.presto.operator.TaskStats;
 import com.facebook.presto.server.TaskUpdateRequest;
 import com.facebook.presto.server.smile.BaseResponse;
@@ -34,6 +36,7 @@ import com.facebook.presto.spark.execution.HttpNativeExecutionTaskInfoFetcher;
 import com.facebook.presto.spark.execution.HttpNativeExecutionTaskResultFetcher;
 import com.facebook.presto.spark.execution.NativeExecutionTask;
 import com.facebook.presto.spark.execution.NativeExecutionTaskFactory;
+import com.facebook.presto.spi.HostAddress;
 import com.facebook.presto.spi.page.PageCodecMarker;
 import com.facebook.presto.spi.page.PagesSerdeUtil;
 import com.facebook.presto.spi.page.SerializedPage;
@@ -45,6 +48,8 @@ import com.google.common.net.MediaType;
 import com.google.common.util.concurrent.AbstractFuture;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.airlift.slice.DynamicSliceOutput;
+import io.airlift.slice.Slice;
+import io.airlift.slice.Slices;
 import io.airlift.units.DataSize;
 import io.airlift.units.Duration;
 import org.joda.time.DateTime;
@@ -54,6 +59,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -76,10 +82,10 @@ import static com.facebook.presto.execution.TaskTestUtils.SPLIT;
 import static com.facebook.presto.execution.TaskTestUtils.createPlanFragment;
 import static com.facebook.presto.execution.buffer.OutputBuffers.BufferType.PARTITIONED;
 import static com.facebook.presto.execution.buffer.OutputBuffers.createInitialEmptyOutputBuffers;
-import static com.facebook.presto.spark.execution.HttpNativeExecutionTaskInfoFetcher.GET_TASK_INFO_INTERVALS;
 import static com.facebook.presto.testing.TestingSession.testSessionBuilder;
 import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
-import static io.airlift.slice.Slices.EMPTY_SLICE;
+import static io.airlift.units.DataSize.Unit.MEGABYTE;
+import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static org.testng.Assert.assertEquals;
@@ -111,15 +117,16 @@ public class TestPrestoSparkHttpWorkerClient
                 0);
         URI uri = uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build();
         PrestoSparkHttpWorkerClient workerClient = new PrestoSparkHttpWorkerClient(
-                new TestingHttpClient(NO_DURATION),
+                new TestingHttpClient(new TestingResponseManager(taskId.toString())),
                 taskId,
                 uri,
                 TASK_INFO_JSON_CODEC,
                 PLAN_FRAGMENT_JSON_CODEC,
-                TASK_UPDATE_REQUEST_JSON_CODEC);
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                new Duration(1, TimeUnit.SECONDS));
         ListenableFuture<PageBufferClient.PagesResponse> future = workerClient.getResults(
                 0,
-                new DataSize(32, DataSize.Unit.MEGABYTE));
+                new DataSize(32, MEGABYTE));
         try {
             PageBufferClient.PagesResponse page = future.get();
             assertEquals(0, page.getToken());
@@ -138,12 +145,13 @@ public class TestPrestoSparkHttpWorkerClient
         TaskId taskId = new TaskId("testid", 0, 0, 0);
         URI uri = uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build();
         PrestoSparkHttpWorkerClient workerClient = new PrestoSparkHttpWorkerClient(
-                new TestingHttpClient(NO_DURATION),
+                new TestingHttpClient(new TestingResponseManager(taskId.toString())),
                 taskId,
                 uri,
                 TASK_INFO_JSON_CODEC,
                 PLAN_FRAGMENT_JSON_CODEC,
-                TASK_UPDATE_REQUEST_JSON_CODEC);
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                new Duration(1, TimeUnit.SECONDS));
         workerClient.acknowledgeResultsAsync(1);
     }
 
@@ -153,12 +161,13 @@ public class TestPrestoSparkHttpWorkerClient
         TaskId taskId = new TaskId("testid", 0, 0, 0);
         URI uri = uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build();
         PrestoSparkHttpWorkerClient workerClient = new PrestoSparkHttpWorkerClient(
-                new TestingHttpClient(NO_DURATION),
+                new TestingHttpClient(new TestingResponseManager(taskId.toString())),
                 taskId,
                 uri,
                 TASK_INFO_JSON_CODEC,
                 PLAN_FRAGMENT_JSON_CODEC,
-                TASK_UPDATE_REQUEST_JSON_CODEC);
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                new Duration(1, TimeUnit.SECONDS));
         ListenableFuture<?> future = workerClient.abortResults();
         try {
             future.get();
@@ -175,12 +184,13 @@ public class TestPrestoSparkHttpWorkerClient
         TaskId taskId = new TaskId("testid", 0, 0, 0);
         URI uri = uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build();
         PrestoSparkHttpWorkerClient workerClient = new PrestoSparkHttpWorkerClient(
-                new TestingHttpClient(NO_DURATION),
+                new TestingHttpClient(new TestingResponseManager(taskId.toString())),
                 taskId,
                 uri,
                 TASK_INFO_JSON_CODEC,
                 PLAN_FRAGMENT_JSON_CODEC,
-                TASK_UPDATE_REQUEST_JSON_CODEC);
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                new Duration(1, TimeUnit.SECONDS));
         ListenableFuture<BaseResponse<TaskInfo>> future = workerClient.getTaskInfo();
         try {
             TaskInfo taskInfo = future.get().getValue();
@@ -198,12 +208,13 @@ public class TestPrestoSparkHttpWorkerClient
         TaskId taskId = new TaskId("testid", 0, 0, 0);
         URI uri = uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build();
         PrestoSparkHttpWorkerClient workerClient = new PrestoSparkHttpWorkerClient(
-                new TestingHttpClient(NO_DURATION),
+                new TestingHttpClient(new TestingResponseManager(taskId.toString())),
                 taskId,
                 uri,
                 TASK_INFO_JSON_CODEC,
                 PLAN_FRAGMENT_JSON_CODEC,
-                TASK_UPDATE_REQUEST_JSON_CODEC);
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                new Duration(1, TimeUnit.SECONDS));
 
         Set<ScheduledSplit> splits = new HashSet<>();
         splits.add(SPLIT);
@@ -231,16 +242,16 @@ public class TestPrestoSparkHttpWorkerClient
         TaskId taskId = new TaskId("testid", 0, 0, 0);
         URI uri = uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build();
         PrestoSparkHttpWorkerClient workerClient = new PrestoSparkHttpWorkerClient(
-                new TestingHttpClient(NO_DURATION),
+                new TestingHttpClient(new TestingResponseManager(taskId.toString())),
                 taskId,
                 uri,
                 TASK_INFO_JSON_CODEC,
                 PLAN_FRAGMENT_JSON_CODEC,
-                TASK_UPDATE_REQUEST_JSON_CODEC);
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                new Duration(1, TimeUnit.SECONDS));
         HttpNativeExecutionTaskResultFetcher taskResultFetcher = new HttpNativeExecutionTaskResultFetcher(
                 newScheduledThreadPool(1),
-                workerClient,
-                Optional.of(new Duration(30, TimeUnit.SECONDS)));
+                workerClient);
         CompletableFuture<Void> future = taskResultFetcher.start();
         try {
             future.get();
@@ -261,22 +272,294 @@ public class TestPrestoSparkHttpWorkerClient
     }
 
     @Test
-    public void testResultFetcherFail()
+    public void testResultFetcherMultipleNonEmptyResults()
     {
-        // Test request timeout.
         TaskId taskId = new TaskId("testid", 0, 0, 0);
         URI uri = uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build();
+        int serializedPageSize = (int) new DataSize(1, MEGABYTE).toBytes();
+        int numPages = 10;
         PrestoSparkHttpWorkerClient workerClient = new PrestoSparkHttpWorkerClient(
-                new TestingHttpClient(new Duration(500, TimeUnit.MILLISECONDS)),
+                new TestingHttpClient(
+                        new TestingResponseManager(
+                            taskId.toString(),
+                            new TestingResponseManager.TestingResultResponseManager()
+                            {
+                                private int requestCount;
+
+                                @Override
+                                public Response createResultResponse(String taskId)
+                                        throws PageTransportErrorException
+                                {
+                                    requestCount++;
+                                    if (requestCount < numPages) {
+                                        return createResultResponseHelper(
+                                                HttpStatus.OK,
+                                                taskId,
+                                                requestCount - 1,
+                                                requestCount,
+                                                false,
+                                                serializedPageSize);
+                                    }
+                                    else if (requestCount == numPages) {
+                                        return createResultResponseHelper(
+                                                HttpStatus.OK,
+                                                taskId,
+                                                requestCount - 1,
+                                                requestCount,
+                                                true,
+                                                serializedPageSize);
+                                    }
+                                    else {
+                                        fail("Retrieving results after buffer completion");
+                                        return null;
+                                    }
+                                }
+                            })),
                 taskId,
                 uri,
                 TASK_INFO_JSON_CODEC,
                 PLAN_FRAGMENT_JSON_CODEC,
-                TASK_UPDATE_REQUEST_JSON_CODEC);
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                new Duration(1, TimeUnit.SECONDS));
         HttpNativeExecutionTaskResultFetcher taskResultFetcher = new HttpNativeExecutionTaskResultFetcher(
                 newScheduledThreadPool(1),
-                workerClient,
-                Optional.of(new Duration(200, TimeUnit.MILLISECONDS)));
+                workerClient);
+        CompletableFuture<Void> future = taskResultFetcher.start();
+        try {
+            future.get();
+            List<SerializedPage> pages = new ArrayList<>();
+            Optional<SerializedPage> page = taskResultFetcher.pollPage();
+            while (page.isPresent()) {
+                pages.add(page.get());
+                page = taskResultFetcher.pollPage();
+            }
+
+            assertEquals(numPages, pages.size());
+            for (int i = 0; i < numPages; i++) {
+                assertEquals(pages.get(i).getSizeInBytes(), serializedPageSize);
+            }
+        }
+        catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+            fail();
+        }
+    }
+
+    private static class BreakingLimitResponseManager
+            extends TestingResponseManager.TestingResultResponseManager
+    {
+        private final int serializedPageSize;
+        private final int numPages;
+
+        private int requestCount;
+
+        public BreakingLimitResponseManager(int serializedPageSize, int numPages)
+        {
+            this.serializedPageSize = serializedPageSize;
+            this.numPages = numPages;
+        }
+
+        @Override
+        public Response createResultResponse(String taskId)
+                throws PageTransportErrorException
+        {
+            requestCount++;
+            if (requestCount < numPages) {
+                return createResultResponseHelper(
+                        HttpStatus.OK,
+                        taskId,
+                        requestCount - 1,
+                        requestCount,
+                        false,
+                        serializedPageSize);
+            }
+            else if (requestCount == numPages) {
+                return createResultResponseHelper(
+                        HttpStatus.OK,
+                        taskId,
+                        requestCount - 1,
+                        requestCount,
+                        true,
+                        serializedPageSize);
+            }
+            else {
+                fail("Retrieving results after buffer completion");
+                return null;
+            }
+        }
+
+        public int getRemainingPageCount()
+        {
+            return numPages - requestCount;
+        }
+    }
+
+    @Test
+    public void testResultFetcherExceedingBufferLimit()
+    {
+        int numPages = 10;
+        int serializedPageSize = (int) new DataSize(32, MEGABYTE).toBytes();
+        TaskId taskId = new TaskId("testid", 0, 0, 0);
+        URI uri = uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build();
+        BreakingLimitResponseManager breakingLimitResponseManager =
+                new BreakingLimitResponseManager(serializedPageSize, numPages);
+
+        PrestoSparkHttpWorkerClient workerClient = new PrestoSparkHttpWorkerClient(
+                new TestingHttpClient(
+                        new TestingResponseManager(
+                                taskId.toString(),
+                                breakingLimitResponseManager)),
+                taskId,
+                uri,
+                TASK_INFO_JSON_CODEC,
+                PLAN_FRAGMENT_JSON_CODEC,
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                new Duration(1, TimeUnit.SECONDS));
+        HttpNativeExecutionTaskResultFetcher taskResultFetcher = new HttpNativeExecutionTaskResultFetcher(
+                newScheduledThreadPool(10),
+                workerClient);
+        CompletableFuture<Void> future = taskResultFetcher.start();
+        try {
+            Optional<SerializedPage> page = Optional.empty();
+            while (!page.isPresent()) {
+                page = taskResultFetcher.pollPage();
+            }
+            // Wait a bit for fetches to overwhelm memory.
+            Thread.sleep(5000);
+            assertEquals(breakingLimitResponseManager.getRemainingPageCount(), 5);
+            List<SerializedPage> pages = new ArrayList<>();
+            pages.add(page.get());
+            while (pages.size() < numPages) {
+                page = taskResultFetcher.pollPage();
+                page.ifPresent(pages::add);
+            }
+            future.get();
+            assertEquals(numPages, pages.size());
+            for (int i = 0; i < numPages; i++) {
+                assertEquals(pages.get(i).getSizeInBytes(), serializedPageSize);
+            }
+        }
+        catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+            fail();
+        }
+    }
+
+    private static class TimeoutResponseManager
+            extends TestingResponseManager.TestingResultResponseManager
+    {
+        private final int serializedPageSize;
+        private final int numPages;
+        private final int numInitialTimeouts;
+
+        private int requestCount;
+        private int timeoutCount;
+
+        public TimeoutResponseManager(int serializedPageSize, int numPages, int numInitialTimeouts)
+        {
+            this.serializedPageSize = serializedPageSize;
+            this.numPages = numPages;
+            this.numInitialTimeouts = numInitialTimeouts;
+        }
+
+        @Override
+        public Response createResultResponse(String taskId)
+                throws PageTransportErrorException
+        {
+            if (++timeoutCount <= numInitialTimeouts) {
+                throw new PageTransportErrorException(new HostAddress("localhost", 8080), "Mock HttpClient Timeout");
+            }
+            requestCount++;
+            if (requestCount < numPages) {
+                return createResultResponseHelper(
+                        HttpStatus.OK,
+                        taskId,
+                        requestCount - 1,
+                        requestCount,
+                        false,
+                        serializedPageSize);
+            }
+            else if (requestCount == numPages) {
+                return createResultResponseHelper(
+                        HttpStatus.OK,
+                        taskId,
+                        requestCount - 1,
+                        requestCount,
+                        true,
+                        serializedPageSize);
+            }
+            else {
+                fail("Retrieving results after buffer completion");
+                return null;
+            }
+        }
+    }
+
+    @Test
+    public void testResultFetcherTransportErrorRecovery()
+    {
+        int numPages = 10;
+        int serializedPageSize = 0;
+        // Transport error count less than MAX_TRANSPORT_ERROR_RETRIES (5).
+        // Expecting recovery from failed requests
+        int numTransportErrors = 3;
+
+        TaskId taskId = new TaskId("testid", 0, 0, 0);
+        URI uri = uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build();
+        TimeoutResponseManager timeoutResponseManager =
+                new TimeoutResponseManager(serializedPageSize, numPages, numTransportErrors);
+
+        PrestoSparkHttpWorkerClient workerClient = new PrestoSparkHttpWorkerClient(
+                new TestingHttpClient(
+                        new TestingResponseManager(
+                            taskId.toString(),
+                            timeoutResponseManager)),
+                taskId,
+                uri,
+                TASK_INFO_JSON_CODEC,
+                PLAN_FRAGMENT_JSON_CODEC,
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                new Duration(1, TimeUnit.SECONDS));
+        HttpNativeExecutionTaskResultFetcher taskResultFetcher = new HttpNativeExecutionTaskResultFetcher(
+                newScheduledThreadPool(10),
+                workerClient);
+        CompletableFuture<Void> future = taskResultFetcher.start();
+        try {
+            future.get();
+            List<SerializedPage> pages = new ArrayList<>();
+            Optional<SerializedPage> page = taskResultFetcher.pollPage();
+            while (page.isPresent()) {
+                pages.add(page.get());
+                page = taskResultFetcher.pollPage();
+            }
+
+            assertEquals(pages.size(), numPages);
+            for (int i = 0; i < numPages; i++) {
+                assertEquals(pages.get(i).getSizeInBytes(), serializedPageSize);
+            }
+        }
+        catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+            fail();
+        }
+    }
+
+    @Test
+    public void testResultFetcherTransportErrorFail()
+    {
+        TaskId taskId = new TaskId("testid", 0, 0, 0);
+        URI uri = uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build();
+        PrestoSparkHttpWorkerClient workerClient = new PrestoSparkHttpWorkerClient(
+                new TestingHttpClient(new TestingResponseManager(taskId.toString(), new TimeoutResponseManager(0, 10, 10))),
+                taskId,
+                uri,
+                TASK_INFO_JSON_CODEC,
+                PLAN_FRAGMENT_JSON_CODEC,
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                new Duration(1, TimeUnit.SECONDS));
+        HttpNativeExecutionTaskResultFetcher taskResultFetcher = new HttpNativeExecutionTaskResultFetcher(
+                newScheduledThreadPool(1),
+                workerClient);
         CompletableFuture<Void> future = taskResultFetcher.start();
         assertThrows(ExecutionException.class, future::get);
     }
@@ -286,21 +569,24 @@ public class TestPrestoSparkHttpWorkerClient
     {
         TaskId taskId = new TaskId("testid", 0, 0, 0);
         URI uri = uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build();
+        Duration fetchInterval = new Duration(1, TimeUnit.SECONDS);
         PrestoSparkHttpWorkerClient workerClient = new PrestoSparkHttpWorkerClient(
-                new TestingHttpClient(NO_DURATION),
+                new TestingHttpClient(new TestingResponseManager(taskId.toString())),
                 taskId,
                 uri,
                 TASK_INFO_JSON_CODEC,
                 PLAN_FRAGMENT_JSON_CODEC,
-                TASK_UPDATE_REQUEST_JSON_CODEC);
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                new Duration(1, TimeUnit.SECONDS));
         HttpNativeExecutionTaskInfoFetcher taskInfoFetcher = new HttpNativeExecutionTaskInfoFetcher(
                 newScheduledThreadPool(1),
                 workerClient,
-                newSingleThreadExecutor());
+                newSingleThreadExecutor(),
+                new Duration(1, TimeUnit.SECONDS));
         assertFalse(taskInfoFetcher.getTaskInfo().isPresent());
         taskInfoFetcher.start();
         try {
-            Thread.sleep(3 * GET_TASK_INFO_INTERVALS.toMillis());
+            Thread.sleep(3 * fetchInterval.toMillis());
         }
         catch (InterruptedException e) {
             e.printStackTrace();
@@ -317,13 +603,17 @@ public class TestPrestoSparkHttpWorkerClient
         // single thread.
         ScheduledExecutorService scheduler = newScheduledThreadPool(4);
         TaskId taskId = new TaskId("testid", 0, 0, 0);
+        TaskManagerConfig config = new TaskManagerConfig();
+        config.setInfoRefreshMaxWait(new Duration(5, TimeUnit.SECONDS));
+        config.setInfoUpdateInterval(new Duration(200, TimeUnit.MILLISECONDS));
         NativeExecutionTaskFactory factory = new NativeExecutionTaskFactory(
-                new TestingHttpClient(NO_DURATION),
+                new TestingHttpClient(new TestingResponseManager(taskId.toString(), new TimeoutResponseManager(0, 10, 0))),
                 newSingleThreadExecutor(),
                 scheduler,
                 TASK_INFO_JSON_CODEC,
                 PLAN_FRAGMENT_JSON_CODEC,
-                TASK_UPDATE_REQUEST_JSON_CODEC);
+                TASK_UPDATE_REQUEST_JSON_CODEC,
+                config);
         List<TaskSource> sources = new ArrayList<>();
         NativeExecutionTask task = factory.createNativeExecutionTask(
                 testSessionBuilder().build(),
@@ -349,9 +639,7 @@ public class TestPrestoSparkHttpWorkerClient
         {
             try {
                 Optional<SerializedPage> page = task.pollResult();
-                if (page.isPresent()) {
-                    resultPages.add(page.get());
-                }
+                page.ifPresent(resultPages::add);
             }
             catch (InterruptedException e) {
                 e.printStackTrace();
@@ -371,7 +659,7 @@ public class TestPrestoSparkHttpWorkerClient
                     // Wait for a bit to allow enough time to consume results completely.
                     Thread.sleep(400);
                     assertFalse(task.pollResult().isPresent());
-                    assertFalse(resultPages.isEmpty());
+                    assertEquals(resultPages.size(), 10);
                     task.stop();
                     scheduledFuture.cancel(false);
                 }
@@ -412,17 +700,18 @@ public class TestPrestoSparkHttpWorkerClient
     private static class TestingHttpClient
             implements com.facebook.airlift.http.client.HttpClient
     {
-        private final Duration mockDelay;
         private final ScheduledExecutorService executor;
+        private final TestingResponseManager responseManager;
 
-        public TestingHttpClient(Duration mockDelay)
+        public TestingHttpClient(TestingResponseManager responseManager)
         {
-            this.mockDelay = mockDelay;
-            this.executor = newScheduledThreadPool(1);
+            this.executor = newScheduledThreadPool(10);
+            this.responseManager = responseManager;
         }
 
         @Override
-        public <T, E extends Exception> T execute(Request request, ResponseHandler<T, E> responseHandler) throws E
+        public <T, E extends Exception> T execute(Request request, ResponseHandler<T, E> responseHandler)
+                throws E
         {
             try {
                 return executeAsync(request, responseHandler).get();
@@ -449,7 +738,7 @@ public class TestPrestoSparkHttpWorkerClient
                             // GET /v1/task/{taskId}
                             if (Pattern.compile("\\/v1\\/task\\/[a-zA-Z0-9]+.[0-9]+.[0-9]+.[0-9]+\\z").matcher(path).find()) {
                                 try {
-                                    future.complete(responseHandler.handle(request, TestingResponse.createTaskInfoResponse(HttpStatus.OK, taskId)));
+                                    future.complete(responseHandler.handle(request, responseManager.createTaskInfoResponse(HttpStatus.OK)));
                                 }
                                 catch (Exception e) {
                                     e.printStackTrace();
@@ -459,7 +748,7 @@ public class TestPrestoSparkHttpWorkerClient
                             // GET /v1/task/{taskId}/results/{bufferId}/{token}/acknowledge
                             else if (Pattern.compile(".*\\/results\\/[0-9]+\\/[0-9]+\\/acknowledge\\z").matcher(path).find()) {
                                 try {
-                                    future.complete(responseHandler.handle(request, TestingResponse.createDummyResultResponse()));
+                                    future.complete(responseHandler.handle(request, responseManager.createDummyResultResponse()));
                                 }
                                 catch (Exception e) {
                                     e.printStackTrace();
@@ -471,12 +760,7 @@ public class TestPrestoSparkHttpWorkerClient
                                 try {
                                     future.complete(responseHandler.handle(
                                             request,
-                                            TestingResponse.createResultResponse(
-                                                    HttpStatus.OK,
-                                                    taskId,
-                                                    0,
-                                                    1,
-                                                    true)));
+                                            responseManager.createResultResponse()));
                                 }
                                 catch (Exception e) {
                                     e.printStackTrace();
@@ -488,7 +772,7 @@ public class TestPrestoSparkHttpWorkerClient
                             // POST /v1/task/{taskId}
                             if (Pattern.compile("\\/v1\\/task\\/[a-zA-Z0-9]+.[0-9]+.[0-9]+.[0-9]+\\z").matcher(path).find()) {
                                 try {
-                                    future.complete(responseHandler.handle(request, TestingResponse.createTaskInfoResponse(HttpStatus.OK, taskId)));
+                                    future.complete(responseHandler.handle(request, responseManager.createTaskInfoResponse(HttpStatus.OK)));
                                 }
                                 catch (Exception e) {
                                     e.printStackTrace();
@@ -500,7 +784,7 @@ public class TestPrestoSparkHttpWorkerClient
                             // DELETE /v1/task/{taskId}
                             if (Pattern.compile("\\/v1\\/task\\/[a-zA-Z0-9]+.[0-9]+.[0-9]+.[0-9]+\\z").matcher(path).find()) {
                                 try {
-                                    future.complete(responseHandler.handle(request, TestingResponse.createDummyResultResponse()));
+                                    future.complete(responseHandler.handle(request, responseManager.createDummyResultResponse()));
                                 }
                                 catch (Exception e) {
                                     e.printStackTrace();
@@ -510,8 +794,8 @@ public class TestPrestoSparkHttpWorkerClient
                         }
                         future.completeExceptionally(new Exception("Unknown path " + path));
                     },
-                    (long) mockDelay.getValue(),
-                    mockDelay.getUnit());
+                    (long) NO_DURATION.getValue(),
+                    NO_DURATION.getUnit());
             return future;
         }
 
@@ -549,11 +833,103 @@ public class TestPrestoSparkHttpWorkerClient
         }
     }
 
+    /**
+     * A stateful response manager for testing purpose. The lifetime of an instantiation of this class should be equivalent to the lifetime of the http client.
+     */
+    public static class TestingResponseManager
+    {
+        private static final JsonCodec<TaskInfo> taskInfoCodec = JsonCodec.jsonCodec(TaskInfo.class);
+        private final TestingResultResponseManager resultResponseManager;
+        private final String taskId;
+
+        public TestingResponseManager(String taskId)
+        {
+            this.taskId = requireNonNull(taskId, "taskId is null");
+            this.resultResponseManager = new TestingResultResponseManager();
+        }
+
+        public TestingResponseManager(String taskId, TestingResultResponseManager resultResponseManager)
+        {
+            this.taskId = requireNonNull(taskId, "taskId is null");
+            this.resultResponseManager = requireNonNull(resultResponseManager, "resultResponseManager is null.");
+        }
+
+        public Response createDummyResultResponse()
+        {
+            return new TestingResponse();
+        }
+
+        public Response createResultResponse()
+                throws PageTransportErrorException
+        {
+            return resultResponseManager.createResultResponse(taskId);
+        }
+
+        public Response createTaskInfoResponse(HttpStatus httpStatus)
+        {
+            ListMultimap<HeaderName, String> headers = ArrayListMultimap.create();
+            headers.put(HeaderName.of(CONTENT_TYPE), String.valueOf(MediaType.create("application", "json")));
+            TaskInfo taskInfo = TaskInfo.createInitialTask(
+                    TaskId.valueOf(taskId),
+                    uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build(),
+                    new ArrayList<>(),
+                    new TaskStats(DateTime.now(), null),
+                    "dummy-node");
+            return new TestingResponse(
+                    httpStatus.code(),
+                    httpStatus.toString(),
+                    headers,
+                    new ByteArrayInputStream(taskInfoCodec.toBytes(taskInfo)));
+        }
+
+        /**
+         * Manager for result fetching related endpoints. It maintains any stateful information inside itself. Callers can extend this class to create their own response handling
+         * logic.
+         */
+        public static class TestingResultResponseManager
+        {
+            /**
+             * A dummy implementation of result creation logic. It shall be overriden by users to create customized result returning logic.
+             */
+            public Response createResultResponse(String taskId)
+                    throws PageTransportErrorException
+            {
+                return createResultResponseHelper(HttpStatus.OK,
+                        taskId,
+                        0,
+                        1,
+                        true,
+                        0);
+            }
+
+            protected Response createResultResponseHelper(
+                    HttpStatus httpStatus,
+                    String taskId,
+                    long token,
+                    long nextToken,
+                    boolean bufferComplete,
+                    int serializedPageSizeBytes)
+            {
+                DynamicSliceOutput slicedOutput = new DynamicSliceOutput(1024);
+                PagesSerdeUtil.writeSerializedPage(slicedOutput, createSerializedPage(serializedPageSizeBytes));
+                ListMultimap<HeaderName, String> headers = ArrayListMultimap.create();
+                headers.put(HeaderName.of(PRESTO_PAGE_TOKEN), String.valueOf(token));
+                headers.put(HeaderName.of(PRESTO_PAGE_NEXT_TOKEN), String.valueOf(nextToken));
+                headers.put(HeaderName.of(PRESTO_BUFFER_COMPLETE), String.valueOf(bufferComplete));
+                headers.put(HeaderName.of(PRESTO_TASK_INSTANCE_ID), taskId);
+                headers.put(HeaderName.of(CONTENT_TYPE), PRESTO_PAGES_TYPE.toString());
+                return new TestingResponse(
+                        httpStatus.code(),
+                        httpStatus.toString(),
+                        headers,
+                        slicedOutput.slice().getInput());
+            }
+        }
+    }
+
     public static class TestingResponse
             implements Response
     {
-        private static final JsonCodec<TaskInfo> taskInfoCodec = JsonCodec.jsonCodec(TaskInfo.class);
-
         private final int statusCode;
         private final String statusMessage;
         private final ListMultimap<HeaderName, String> headers;
@@ -576,56 +952,6 @@ public class TestPrestoSparkHttpWorkerClient
             this.statusMessage = statusMessage;
             this.headers = headers;
             this.inputStream = inputStream;
-        }
-
-        public static Response createDummyResultResponse()
-        {
-            return new TestingResponse();
-        }
-
-        public static Response createResultResponse(
-                HttpStatus httpStatus,
-                String taskId,
-                long token,
-                long nextToken,
-                boolean bufferComplete)
-        {
-            DynamicSliceOutput slicedOutput = new DynamicSliceOutput(1024);
-            SerializedPage serializedPage = new SerializedPage(
-                    EMPTY_SLICE,
-                    PageCodecMarker.none(),
-                    0,
-                    0,
-                    0);
-            PagesSerdeUtil.writeSerializedPage(slicedOutput, serializedPage);
-            ListMultimap<HeaderName, String> headers = ArrayListMultimap.create();
-            headers.put(HeaderName.of(PRESTO_PAGE_TOKEN), String.valueOf(token));
-            headers.put(HeaderName.of(PRESTO_PAGE_NEXT_TOKEN), String.valueOf(nextToken));
-            headers.put(HeaderName.of(PRESTO_BUFFER_COMPLETE), String.valueOf(bufferComplete));
-            headers.put(HeaderName.of(PRESTO_TASK_INSTANCE_ID), taskId);
-            headers.put(HeaderName.of(CONTENT_TYPE), PRESTO_PAGES_TYPE.toString());
-            return new TestingResponse(
-                    httpStatus.code(),
-                    httpStatus.toString(),
-                    headers,
-                    slicedOutput.slice().getInput());
-        }
-
-        public static Response createTaskInfoResponse(HttpStatus httpStatus, String taskId)
-        {
-            ListMultimap<HeaderName, String> headers = ArrayListMultimap.create();
-            headers.put(HeaderName.of(CONTENT_TYPE), String.valueOf(MediaType.create("application", "json")));
-            TaskInfo taskInfo = TaskInfo.createInitialTask(
-                    TaskId.valueOf(taskId),
-                    uriBuilderFrom(BASE_URI).appendPath(TASK_ROOT_PATH).build(),
-                    new ArrayList<>(),
-                    new TaskStats(DateTime.now(), null),
-                    "dummy-node");
-            return new TestingResponse(
-                    httpStatus.code(),
-                    httpStatus.toString(),
-                    headers,
-                    new ByteArrayInputStream(taskInfoCodec.toBytes(taskInfo)));
         }
 
         @Override
@@ -657,5 +983,18 @@ public class TestPrestoSparkHttpWorkerClient
         {
             return inputStream;
         }
+    }
+
+    private static SerializedPage createSerializedPage(int numBytes)
+    {
+        byte[] bytes = new byte[numBytes];
+        Arrays.fill(bytes, (byte) 8);
+        Slice slice = Slices.wrappedBuffer(bytes);
+        return new SerializedPage(
+                slice,
+                PageCodecMarker.none(),
+                0,
+                numBytes,
+                0);
     }
 }

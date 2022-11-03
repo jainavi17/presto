@@ -219,6 +219,7 @@ public class FeaturesConfig
     private boolean queryOptimizationWithMaterializedViewEnabled;
 
     private AggregationIfToFilterRewriteStrategy aggregationIfToFilterRewriteStrategy = AggregationIfToFilterRewriteStrategy.DISABLED;
+    private AnalyzerType analyzerType = AnalyzerType.BUILTIN;
     private boolean verboseRuntimeStatsEnabled;
     private boolean hashBasedDistinctLimitEnabled;
     private int hashBasedDistinctLimitThreshold = 10000;
@@ -238,6 +239,7 @@ public class FeaturesConfig
     private String nativeExecutionExecutablePath = "./presto_server";
     private boolean randomizeOuterJoinNullKey;
     private boolean isOptimizeConditionalAggregationEnabled;
+    private boolean isRemoveRedundantDistinctAggregationEnabled = true;
 
     public enum PartitioningPrecisionStrategy
     {
@@ -2066,6 +2068,19 @@ public class FeaturesConfig
         return this;
     }
 
+    public AnalyzerType getAnalyzerType()
+    {
+        return analyzerType;
+    }
+
+    @Config("analyzer-type")
+    @ConfigDescription("Set the analyzer type for parsing and analyzing.")
+    public FeaturesConfig setAnalyzerType(AnalyzerType analyzerType)
+    {
+        this.analyzerType = analyzerType;
+        return this;
+    }
+
     public boolean isHashBasedDistinctLimitEnabled()
     {
         return hashBasedDistinctLimitEnabled;
@@ -2244,6 +2259,19 @@ public class FeaturesConfig
     public FeaturesConfig setOptimizeConditionalAggregationEnabled(boolean isOptimizeConditionalAggregationEnabled)
     {
         this.isOptimizeConditionalAggregationEnabled = isOptimizeConditionalAggregationEnabled;
+        return this;
+    }
+
+    public boolean isRemoveRedundantDistinctAggregationEnabled()
+    {
+        return isRemoveRedundantDistinctAggregationEnabled;
+    }
+
+    @Config("optimizer.remove-redundant-distinct-aggregation-enabled")
+    @ConfigDescription("Enable removing distinct aggregation node if input is already distinct")
+    public FeaturesConfig setRemoveRedundantDistinctAggregationEnabled(boolean isRemoveRedundantDistinctAggregationEnabled)
+    {
+        this.isRemoveRedundantDistinctAggregationEnabled = isRemoveRedundantDistinctAggregationEnabled;
         return this;
     }
 }

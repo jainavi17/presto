@@ -11,40 +11,39 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.execution;
+package com.facebook.presto.sql.analyzer;
 
-import com.facebook.presto.Session;
-import com.facebook.presto.execution.QueryPreparer.PreparedQuery;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.WarningCollector;
-import com.facebook.presto.sql.analyzer.SemanticException;
+import com.facebook.presto.sql.analyzer.BuiltInQueryPreparer.BuiltInPreparedQuery;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.tree.AllColumns;
 import com.facebook.presto.sql.tree.QualifiedName;
+import com.google.common.collect.ImmutableMap;
 import org.testng.annotations.Test;
 
+import java.util.Map;
 import java.util.Optional;
 
-import static com.facebook.presto.SessionTestUtils.TEST_SESSION;
-import static com.facebook.presto.SystemSessionProperties.LOG_FORMATTED_QUERY_ENABLED;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_FOUND;
 import static com.facebook.presto.sql.QueryUtil.selectList;
 import static com.facebook.presto.sql.QueryUtil.simpleQuery;
 import static com.facebook.presto.sql.QueryUtil.table;
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.INVALID_PARAMETER_USAGE;
-import static com.facebook.presto.testing.TestingSession.testSessionBuilder;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.fail;
 
-public class TestQueryPreparer
+public class TestBuiltInQueryPreparer
 {
     private static final SqlParser SQL_PARSER = new SqlParser();
-    private static final QueryPreparer QUERY_PREPARER = new QueryPreparer(SQL_PARSER);
+    private static final BuiltInQueryPreparer QUERY_PREPARER = new BuiltInQueryPreparer(SQL_PARSER);
+    private static final Map<String, String> emptyPreparedStatements = ImmutableMap.of();
+    private static final AnalyzerOptions testAnalyzerOptions = AnalyzerOptions.builder().build();
 
     @Test
     public void testSelectStatement()
     {
-        PreparedQuery preparedQuery = QUERY_PREPARER.prepareQuery(TEST_SESSION, "SELECT * FROM foo", WarningCollector.NOOP);
+        BuiltInPreparedQuery preparedQuery = QUERY_PREPARER.prepareQuery(testAnalyzerOptions, "SELECT * FROM foo", emptyPreparedStatements, WarningCollector.NOOP);
         assertEquals(preparedQuery.getStatement(),
                 simpleQuery(selectList(new AllColumns()), table(QualifiedName.of("foo"))));
     }
@@ -52,10 +51,8 @@ public class TestQueryPreparer
     @Test
     public void testExecuteStatement()
     {
-        Session session = testSessionBuilder()
-                .addPreparedStatement("my_query", "SELECT * FROM foo")
-                .build();
-        PreparedQuery preparedQuery = QUERY_PREPARER.prepareQuery(session, "EXECUTE my_query", WarningCollector.NOOP);
+        Map<String, String> preparedStatements = ImmutableMap.of("my_query", "SELECT * FROM foo");
+        BuiltInPreparedQuery preparedQuery = QUERY_PREPARER.prepareQuery(testAnalyzerOptions, "EXECUTE my_query", preparedStatements, WarningCollector.NOOP);
         assertEquals(preparedQuery.getStatement(),
                 simpleQuery(selectList(new AllColumns()), table(QualifiedName.of("foo"))));
     }
@@ -64,7 +61,7 @@ public class TestQueryPreparer
     public void testExecuteStatementDoesNotExist()
     {
         try {
-            QUERY_PREPARER.prepareQuery(TEST_SESSION, "execute my_query", WarningCollector.NOOP);
+            QUERY_PREPARER.prepareQuery(testAnalyzerOptions, "execute my_query", emptyPreparedStatements, WarningCollector.NOOP);
             fail("expected exception");
         }
         catch (PrestoException e) {
@@ -76,10 +73,8 @@ public class TestQueryPreparer
     public void testTooManyParameters()
     {
         try {
-            Session session = testSessionBuilder()
-                    .addPreparedStatement("my_query", "SELECT * FROM foo where col1 = ?")
-                    .build();
-            QUERY_PREPARER.prepareQuery(session, "EXECUTE my_query USING 1,2", WarningCollector.NOOP);
+            Map<String, String> preparedStatements = ImmutableMap.of("my_query", "SELECT * FROM foo where col1 = ?");
+            QUERY_PREPARER.prepareQuery(testAnalyzerOptions, "EXECUTE my_query USING 1,2", preparedStatements, WarningCollector.NOOP);
             fail("expected exception");
         }
         catch (SemanticException e) {
@@ -91,10 +86,8 @@ public class TestQueryPreparer
     public void testTooFewParameters()
     {
         try {
-            Session session = testSessionBuilder()
-                    .addPreparedStatement("my_query", "SELECT ? FROM foo where col1 = ?")
-                    .build();
-            QUERY_PREPARER.prepareQuery(session, "EXECUTE my_query USING 1", WarningCollector.NOOP);
+            Map<String, String> preparedStatements = ImmutableMap.of("my_query", "SELECT ? FROM foo where col1 = ?");
+            QUERY_PREPARER.prepareQuery(testAnalyzerOptions, "EXECUTE my_query USING 1", preparedStatements, WarningCollector.NOOP);
             fail("expected exception");
         }
         catch (SemanticException e) {
@@ -105,13 +98,11 @@ public class TestQueryPreparer
     @Test
     public void testFormattedQuery()
     {
-        Session prepareSession = testSessionBuilder()
-                .setSystemProperty(LOG_FORMATTED_QUERY_ENABLED, "true")
-                .build();
-
-        PreparedQuery preparedQuery = QUERY_PREPARER.prepareQuery(
-                prepareSession,
+        AnalyzerOptions analyzerOptions = AnalyzerOptions.builder().setLogFormattedQueryEnabled(true).build();
+        BuiltInPreparedQuery preparedQuery = QUERY_PREPARER.prepareQuery(
+                analyzerOptions,
                 "PREPARE test FROM SELECT * FROM foo where col1 = ?",
+                emptyPreparedStatements,
                 WarningCollector.NOOP);
         assertEquals(preparedQuery.getFormattedQuery(), Optional.of("-- Formatted Query:\n" +
                 "PREPARE test FROM\n" +
@@ -121,8 +112,9 @@ public class TestQueryPreparer
                 "   WHERE (col1 = ?)\n"));
 
         preparedQuery = QUERY_PREPARER.prepareQuery(
-                prepareSession,
+                analyzerOptions,
                 "PREPARE test FROM SELECT * FROM foo",
+                emptyPreparedStatements,
                 WarningCollector.NOOP);
         assertEquals(preparedQuery.getFormattedQuery(), Optional.of("-- Formatted Query:\n" +
                 "PREPARE test FROM\n" +

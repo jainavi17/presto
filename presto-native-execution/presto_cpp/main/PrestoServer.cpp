@@ -38,6 +38,7 @@
 #include "velox/dwio/dwrf/reader/DwrfReader.h"
 #include "velox/exec/Driver.h"
 #include "velox/exec/PartitionedOutputBufferManager.h"
+#include "velox/functions/prestosql/aggregates/RegisterAggregateFunctions.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
 #include "velox/functions/prestosql/window/WindowFunctionsRegistration.h"
 #include "velox/serializers/PrestoSerializer.h"
@@ -142,7 +143,7 @@ void PrestoServer::run() {
   }
 
   registerPrestoCppCounters();
-  velox::filesystems::registerLocalFileSystem();
+  registerFileSystems();
   registerOptionalHiveStorageAdapters();
   protocol::registerHiveConnectors();
   protocol::registerTpchConnector();
@@ -227,6 +228,7 @@ void PrestoServer::run() {
       });
 
   velox::functions::prestosql::registerAllScalarFunctions();
+  velox::aggregate::prestosql::registerAllAggregateFunctions();
   velox::window::registerWindowFunctions();
   if (!velox::isRegisteredVectorSerde()) {
     velox::serializer::presto::PrestoVectorSerde::registerVectorSerde();
@@ -461,6 +463,10 @@ std::vector<std::string> PrestoServer::registerConnectors(
     }
   }
   return catalogNames;
+}
+
+void PrestoServer::registerFileSystems() {
+  velox::filesystems::registerLocalFileSystem();
 }
 
 std::shared_ptr<velox::connector::Connector> PrestoServer::connectorWithCache(

@@ -11,80 +11,84 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.execution;
+package com.facebook.presto.sql.analyzer;
 
-import com.facebook.presto.Session;
 import com.facebook.presto.common.resourceGroups.QueryType;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.PrestoWarning;
 import com.facebook.presto.spi.WarningCollector;
-import com.facebook.presto.sql.analyzer.SemanticException;
+import com.facebook.presto.sql.analyzer.utils.StatementUtils;
 import com.facebook.presto.sql.parser.ParsingException;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.tree.Execute;
 import com.facebook.presto.sql.tree.Explain;
 import com.facebook.presto.sql.tree.Expression;
 import com.facebook.presto.sql.tree.Statement;
-import com.facebook.presto.util.StatementUtils;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 
 import javax.inject.Inject;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
-import static com.facebook.presto.SystemSessionProperties.getWarningHandlingLevel;
-import static com.facebook.presto.SystemSessionProperties.isLogFormattedQueryEnabled;
-import static com.facebook.presto.execution.ParameterExtractor.getParameterCount;
-import static com.facebook.presto.execution.warnings.WarningHandlingLevel.AS_ERROR;
+import static com.facebook.presto.common.WarningHandlingLevel.AS_ERROR;
+import static com.facebook.presto.spi.StandardErrorCode.NOT_FOUND;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_SUPPORTED;
 import static com.facebook.presto.spi.StandardErrorCode.WARNING_AS_ERROR;
-import static com.facebook.presto.sql.ParsingUtil.createParsingOptions;
 import static com.facebook.presto.sql.SqlFormatter.formatSql;
 import static com.facebook.presto.sql.analyzer.ConstantExpressionVerifier.verifyExpressionIsConstant;
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.INVALID_PARAMETER_USAGE;
+import static com.facebook.presto.sql.analyzer.utils.ParameterExtractor.getParameterCount;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.joining;
 
-public class QueryPreparer
+/**
+ * This query preparer provides builtin functionality. It leverages builtin parser and analyzer.
+ */
+public class BuiltInQueryPreparer
+        implements QueryPreparer
 {
     private final SqlParser sqlParser;
 
     @Inject
-    public QueryPreparer(SqlParser sqlParser)
+    public BuiltInQueryPreparer(SqlParser sqlParser)
     {
         this.sqlParser = requireNonNull(sqlParser, "sqlParser is null");
     }
 
-    public PreparedQuery prepareQuery(Session session, String query, WarningCollector warningCollector)
+    @Override
+    public BuiltInPreparedQuery prepareQuery(AnalyzerOptions analyzerOptions, String query, Map<String, String> preparedStatements, WarningCollector warningCollector)
             throws ParsingException, PrestoException, SemanticException
     {
-        Statement wrappedStatement = sqlParser.createStatement(query, createParsingOptions(session, warningCollector));
-        if (warningCollector.hasWarnings() && getWarningHandlingLevel(session) == AS_ERROR) {
+        Statement wrappedStatement = sqlParser.createStatement(query, analyzerOptions.getParsingOptions());
+        if (warningCollector.hasWarnings() && analyzerOptions.getWarningHandlingLevel() == AS_ERROR) {
             throw new PrestoException(WARNING_AS_ERROR, format("Warning handling level set to AS_ERROR. Warnings: %n %s",
                     warningCollector.getWarnings().stream()
                             .map(PrestoWarning::getMessage)
                             .collect(joining(System.lineSeparator()))));
         }
-        return prepareQuery(session, wrappedStatement, warningCollector);
+        return prepareQuery(analyzerOptions, wrappedStatement, preparedStatements);
     }
 
-    public PreparedQuery prepareQuery(Session session, Statement wrappedStatement, WarningCollector warningCollector)
+    public BuiltInPreparedQuery prepareQuery(AnalyzerOptions analyzerOptions, Statement wrappedStatement, Map<String, String> preparedStatements)
             throws ParsingException, PrestoException, SemanticException
     {
         Statement statement = wrappedStatement;
         Optional<String> prepareSql = Optional.empty();
         if (statement instanceof Execute) {
-            prepareSql = Optional.of(session.getPreparedStatementFromExecute((Execute) statement));
-            statement = sqlParser.createStatement(prepareSql.get(), createParsingOptions(session, warningCollector));
+            String preparedStatementName = ((Execute) statement).getName().getValue();
+            prepareSql = Optional.ofNullable(preparedStatements.get(preparedStatementName));
+            String query = prepareSql.orElseThrow(() -> new PrestoException(NOT_FOUND, "Prepared statement not found: " + preparedStatementName));
+            statement = sqlParser.createStatement(query, analyzerOptions.getParsingOptions());
         }
 
         if (statement instanceof Explain && ((Explain) statement).isAnalyze()) {
             Statement innerStatement = ((Explain) statement).getStatement();
             Optional<QueryType> innerQueryType = StatementUtils.getQueryType(innerStatement.getClass());
-            if (!innerQueryType.isPresent() || innerQueryType.get() == QueryType.DATA_DEFINITION) {
+            if (!innerQueryType.isPresent() || innerQueryType.get() == QueryType.DATA_DEFINITION || innerQueryType.get() == QueryType.CONTROL) {
                 throw new PrestoException(NOT_SUPPORTED, "EXPLAIN ANALYZE doesn't support statement type: " + innerStatement.getClass().getSimpleName());
             }
         }
@@ -94,10 +98,10 @@ public class QueryPreparer
         }
         validateParameters(statement, parameters);
         Optional<String> formattedQuery = Optional.empty();
-        if (isLogFormattedQueryEnabled(session)) {
+        if (analyzerOptions.isLogFormattedQueryEnabled()) {
             formattedQuery = Optional.of(getFormattedQuery(statement, parameters));
         }
-        return new PreparedQuery(statement, parameters, formattedQuery, prepareSql);
+        return new BuiltInPreparedQuery(wrappedStatement, statement, parameters, formattedQuery, prepareSql);
     }
 
     private static String getFormattedQuery(Statement statement, List<Expression> parameters)
@@ -119,19 +123,19 @@ public class QueryPreparer
         }
     }
 
-    public static class PreparedQuery
+    public static class BuiltInPreparedQuery
+            extends PreparedQuery
     {
         private final Statement statement;
+        private final Statement wrappedStatement;
         private final List<Expression> parameters;
-        private final Optional<String> formattedQuery;
-        private final Optional<String> prepareSql;
 
-        public PreparedQuery(Statement statement, List<Expression> parameters, Optional<String> formattedQuery, Optional<String> prepareSql)
+        public BuiltInPreparedQuery(Statement wrappedStatement, Statement statement, List<Expression> parameters, Optional<String> formattedQuery, Optional<String> prepareSql)
         {
+            super(formattedQuery, prepareSql);
+            this.wrappedStatement = requireNonNull(wrappedStatement, "wrappedStatement is null");
             this.statement = requireNonNull(statement, "statement is null");
             this.parameters = ImmutableList.copyOf(requireNonNull(parameters, "parameters is null"));
-            this.formattedQuery = requireNonNull(formattedQuery, "formattedQuery is null");
-            this.prepareSql = requireNonNull(prepareSql, "prepareSql is null");
         }
 
         public Statement getStatement()
@@ -139,19 +143,24 @@ public class QueryPreparer
             return statement;
         }
 
+        public Statement getWrappedStatement()
+        {
+            return wrappedStatement;
+        }
+
         public List<Expression> getParameters()
         {
             return parameters;
         }
 
-        public Optional<String> getFormattedQuery()
+        public Optional<QueryType> getQueryType()
         {
-            return formattedQuery;
+            return StatementUtils.getQueryType(statement.getClass());
         }
 
-        public Optional<String> getPrepareSql()
+        public boolean isTransactionControlStatement()
         {
-            return prepareSql;
+            return StatementUtils.isTransactionControlStatement(getStatement());
         }
     }
 }

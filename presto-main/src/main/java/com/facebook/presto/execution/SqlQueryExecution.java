@@ -19,7 +19,6 @@ import com.facebook.presto.common.resourceGroups.QueryType;
 import com.facebook.presto.cost.CostCalculator;
 import com.facebook.presto.cost.HistoryBasedPlanStatisticsManager;
 import com.facebook.presto.cost.StatsCalculator;
-import com.facebook.presto.execution.QueryPreparer.PreparedQuery;
 import com.facebook.presto.execution.StateMachine.StateChangeListener;
 import com.facebook.presto.execution.buffer.OutputBuffers;
 import com.facebook.presto.execution.buffer.OutputBuffers.OutputBufferId;
@@ -45,6 +44,7 @@ import com.facebook.presto.split.CloseableSplitSourceProvider;
 import com.facebook.presto.split.SplitManager;
 import com.facebook.presto.sql.analyzer.Analysis;
 import com.facebook.presto.sql.analyzer.Analyzer;
+import com.facebook.presto.sql.analyzer.BuiltInQueryPreparer.BuiltInPreparedQuery;
 import com.facebook.presto.sql.analyzer.QueryExplainer;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.InputExtractor;
@@ -90,7 +90,7 @@ import static com.facebook.presto.execution.buffer.OutputBuffers.BROADCAST_PARTI
 import static com.facebook.presto.execution.buffer.OutputBuffers.createInitialEmptyOutputBuffers;
 import static com.facebook.presto.execution.buffer.OutputBuffers.createSpoolingOutputBuffers;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_SUPPORTED;
-import static com.facebook.presto.sql.ParameterUtils.parameterExtractor;
+import static com.facebook.presto.sql.analyzer.utils.ParameterUtils.parameterExtractor;
 import static com.facebook.presto.sql.planner.PlanNodeCanonicalInfo.getCanonicalInfo;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Throwables.throwIfInstanceOf;
@@ -136,7 +136,7 @@ public class SqlQueryExecution
     private final PlanCanonicalInfoProvider planCanonicalInfoProvider;
 
     private SqlQueryExecution(
-            PreparedQuery preparedQuery,
+            BuiltInPreparedQuery preparedQuery,
             QueryStateMachine stateMachine,
             String slug,
             int retryCount,
@@ -401,8 +401,8 @@ public class SqlQueryExecution
                         Thread.currentThread(),
                         timeoutThreadExecutor,
                         getQueryAnalyzerTimeout(getSession()))) {
-                    // analyze query
-                    plan = analyzeQuery();
+                    // create logical plan for the query
+                    plan = createLogicalPlan();
                 }
 
                 metadata.beginQuery(getSession(), plan.getConnectors());
@@ -464,50 +464,45 @@ public class SqlQueryExecution
         stateMachine.addQueryInfoStateChangeListener(stateChangeListener);
     }
 
-    private PlanRoot analyzeQuery()
+    private PlanRoot createLogicalPlan()
     {
         try {
-            return doAnalyzeQuery();
+            // time analysis phase
+            stateMachine.beginAnalysis();
+
+            // plan query
+            LogicalPlanner logicalPlanner = new LogicalPlanner(false, stateMachine.getSession(), planOptimizers, idAllocator, metadata, sqlParser, statsCalculator, costCalculator, stateMachine.getWarningCollector(), planChecker);
+            Plan plan = getSession().getRuntimeStats().profileNanos(
+                    LOGICAL_PLANNER_TIME_NANOS,
+                    () -> logicalPlanner.plan(analysis));
+            queryPlan.set(plan);
+            stateMachine.setPlanStatsAndCosts(plan.getStatsAndCosts());
+            stateMachine.setPlanCanonicalInfo(getCanonicalInfo(getSession(), plan.getRoot(), planCanonicalInfoProvider));
+
+            // extract inputs
+            List<Input> inputs = new InputExtractor(metadata, stateMachine.getSession()).extractInputs(plan.getRoot());
+            stateMachine.setInputs(inputs);
+
+            // extract output
+            Optional<Output> output = new OutputExtractor().extractOutput(plan.getRoot());
+            stateMachine.setOutput(output);
+
+            // fragment the plan
+            // the variableAllocator is finally passed to SqlQueryScheduler for runtime cost-based optimizations
+            variableAllocator.set(new PlanVariableAllocator(plan.getTypes().allVariables()));
+            SubPlan fragmentedPlan = getSession().getRuntimeStats().profileNanos(
+                    FRAGMENT_PLAN_TIME_NANOS,
+                    () -> planFragmenter.createSubPlans(stateMachine.getSession(), plan, false, idAllocator, variableAllocator.get(), stateMachine.getWarningCollector()));
+
+            // record analysis time
+            stateMachine.endAnalysis();
+
+            boolean explainAnalyze = analysis.getStatement() instanceof Explain && ((Explain) analysis.getStatement()).isAnalyze();
+            return new PlanRoot(fragmentedPlan, !explainAnalyze, extractConnectors(analysis));
         }
         catch (StackOverflowError e) {
             throw new PrestoException(NOT_SUPPORTED, "statement is too large (stack overflow during analysis)", e);
         }
-    }
-
-    private PlanRoot doAnalyzeQuery()
-    {
-        // time analysis phase
-        stateMachine.beginAnalysis();
-
-        // plan query
-        LogicalPlanner logicalPlanner = new LogicalPlanner(false, stateMachine.getSession(), planOptimizers, idAllocator, metadata, sqlParser, statsCalculator, costCalculator, stateMachine.getWarningCollector(), planChecker);
-        Plan plan = getSession().getRuntimeStats().profileNanos(
-                LOGICAL_PLANNER_TIME_NANOS,
-                () -> logicalPlanner.plan(analysis));
-        queryPlan.set(plan);
-        stateMachine.setPlanStatsAndCosts(plan.getStatsAndCosts());
-        stateMachine.setPlanCanonicalInfo(getCanonicalInfo(getSession(), plan.getRoot(), planCanonicalInfoProvider));
-
-        // extract inputs
-        List<Input> inputs = new InputExtractor(metadata, stateMachine.getSession()).extractInputs(plan.getRoot());
-        stateMachine.setInputs(inputs);
-
-        // extract output
-        Optional<Output> output = new OutputExtractor().extractOutput(plan.getRoot());
-        stateMachine.setOutput(output);
-
-        // fragment the plan
-        // the variableAllocator is finally passed to SqlQueryScheduler for runtime cost-based optimizations
-        variableAllocator.set(new PlanVariableAllocator(plan.getTypes().allVariables()));
-        SubPlan fragmentedPlan = getSession().getRuntimeStats().profileNanos(
-                FRAGMENT_PLAN_TIME_NANOS,
-                () -> planFragmenter.createSubPlans(stateMachine.getSession(), plan, false, idAllocator, variableAllocator.get(), stateMachine.getWarningCollector()));
-
-        // record analysis time
-        stateMachine.endAnalysis();
-
-        boolean explainAnalyze = analysis.getStatement() instanceof Explain && ((Explain) analysis.getStatement()).isAnalyze();
-        return new PlanRoot(fragmentedPlan, !explainAnalyze, extractConnectors(analysis));
     }
 
     private static Set<ConnectorId> extractConnectors(Analysis analysis)
@@ -831,7 +826,7 @@ public class SqlQueryExecution
 
         @Override
         public QueryExecution createQueryExecution(
-                PreparedQuery preparedQuery,
+                BuiltInPreparedQuery preparedQuery,
                 QueryStateMachine stateMachine,
                 String slug,
                 int retryCount,
