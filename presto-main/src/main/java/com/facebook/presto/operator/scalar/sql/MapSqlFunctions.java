@@ -89,4 +89,15 @@ public class MapSqlFunctions
     {
         return "RETURN map_filter(input, (k, v) -> v is not null)";
     }
+
+    @SqlInvokedScalarFunction(value = "map_remove_entries", deterministic = true, calledOnNullInput = true)
+    @Description("Constructs a map by removing all the key value pairs that matches the given predicate.")
+    @TypeParameter("K")
+    @TypeParameter("V")
+    @SqlParameters({@SqlParameter(name = "input", type = "map(K, V)"), @SqlParameter(name = "f", type = "function(K, V, boolean)")})
+    @SqlType("map(K, V)")
+    public static String mapRemoveEntries()
+    {
+        return "RETURN map_from_entries(array_except(map_entries(input), map_entries(map_filter(input, f))))";
+    }
 }
